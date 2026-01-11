@@ -4,6 +4,5 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bitflags = "2.10.0"
 rug = "1.28.0"
 ustr = "1.1.0"

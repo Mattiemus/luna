@@ -79,7 +79,6 @@ dependencies = [
 name = "luna_lang"
 version = "0.1.0"
 dependencies = [
- "bitflags",
  "rug",
  "ustr",
 ]

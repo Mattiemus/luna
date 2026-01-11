@@ -11,6 +11,15 @@ pub struct Context {
 }
 
 impl Context {
+    pub fn new(name: impl Into<IString>) -> Self {
+        Self {
+            name: name.into(),
+            attributes: HashMap::new(),
+            symbols: HashMap::new(),
+            state_version: 0,
+        }
+    }
+
     pub fn new_global_context() -> Self {
         let mut context = Self {
             name: IString::from("Global"),
@@ -25,20 +34,22 @@ impl Context {
         context
     }
 
-    pub fn get_attributes(&self, symbol: IString) -> Attributes {
-        match self.attributes.get(&symbol) {
-            None => Attributes::empty(),
+    pub fn get_attributes(&self, symbol: impl Into<IString>) -> Attributes {
+        match self.attributes.get(&symbol.into()) {
+            None => Attributes::new(),
             Some(attributes) => *attributes,
         }
     }
 
     pub fn set_attributes(
         &mut self,
-        symbol: IString,
+        symbol: impl Into<IString>,
         new_attributes: Attributes,
     ) -> Result<(), String> {
+        let symbol = symbol.into();
+
         let attributes = self.get_attributes(symbol);
-        if attributes.contains(Attributes::ATTRIBUTES_READ_ONLY) {
+        if attributes.attributes_read_only() {
             return Err(format!("Symbol '{}' has read-only attributes", symbol));
         }
 
@@ -46,19 +57,25 @@ impl Context {
         Ok(())
     }
 
-    pub fn get_symbol(&self, symbol: IString) -> Option<&SymbolRecord> {
-        self.symbols.get(&symbol)
+    pub fn get_symbol(&self, symbol: impl Into<IString>) -> Option<&SymbolRecord> {
+        self.symbols.get(&symbol.into())
     }
 
-    pub fn get_symbol_mut(&mut self, symbol: IString) -> &mut SymbolRecord {
+    pub fn get_symbol_mut(&mut self, symbol: impl Into<IString>) -> &mut SymbolRecord {
         self.symbols
-            .entry(symbol)
+            .entry(symbol.into())
             .or_insert_with(|| SymbolRecord::empty())
     }
 
-    pub fn set_own_value(&mut self, symbol: IString, value: SymbolValue) -> Result<(), String> {
+    pub fn set_own_value(
+        &mut self,
+        symbol: impl Into<IString>,
+        value: SymbolValue,
+    ) -> Result<(), String> {
+        let symbol = symbol.into();
+
         let attributes = self.get_attributes(symbol);
-        if attributes.contains(Attributes::READ_ONLY) {
+        if attributes.read_only() {
             return Err(format!("Symbol '{}' is read-only", symbol));
         }
 
@@ -73,9 +90,15 @@ impl Context {
         Ok(())
     }
 
-    pub fn set_up_value(&mut self, symbol: IString, value: SymbolValue) -> Result<(), String> {
+    pub fn set_up_value(
+        &mut self,
+        symbol: impl Into<IString>,
+        value: SymbolValue,
+    ) -> Result<(), String> {
+        let symbol = symbol.into();
+
         let attributes = self.get_attributes(symbol);
-        if attributes.contains(Attributes::READ_ONLY) {
+        if attributes.read_only() {
             return Err(format!("Symbol '{}' is read-only", symbol));
         }
 
@@ -90,9 +113,15 @@ impl Context {
         Ok(())
     }
 
-    pub fn set_down_value(&mut self, symbol: IString, value: SymbolValue) -> Result<(), String> {
+    pub fn set_down_value(
+        &mut self,
+        symbol: impl Into<IString>,
+        value: SymbolValue,
+    ) -> Result<(), String> {
+        let symbol = symbol.into();
+
         let attributes = self.get_attributes(symbol);
-        if attributes.contains(Attributes::READ_ONLY) {
+        if attributes.read_only() {
             return Err(format!("Symbol '{}' is read-only", symbol));
         }
 
@@ -107,9 +136,15 @@ impl Context {
         Ok(())
     }
 
-    pub fn set_sub_value(&mut self, symbol: IString, value: SymbolValue) -> Result<(), String> {
+    pub fn set_sub_value(
+        &mut self,
+        symbol: impl Into<IString>,
+        value: SymbolValue,
+    ) -> Result<(), String> {
+        let symbol = symbol.into();
+
         let attributes = self.get_attributes(symbol);
-        if attributes.contains(Attributes::READ_ONLY) {
+        if attributes.read_only() {
             return Err(format!("Symbol '{}' is read-only", symbol));
         }
 
@@ -124,10 +159,11 @@ impl Context {
         Ok(())
     }
 
-    pub fn clear_symbol(&mut self, symbol: IString) -> Result<(), String> {
+    pub fn clear_symbol(&mut self, symbol: impl Into<IString>) -> Result<(), String> {
+        let symbol = symbol.into();
+
         let attributes = self.get_attributes(symbol);
-        if attributes.contains(Attributes::READ_ONLY) || attributes.contains(Attributes::PROTECTED)
-        {
+        if attributes.read_only() {
             return Err(format!("Symbol {} is read-only", symbol));
         }
 

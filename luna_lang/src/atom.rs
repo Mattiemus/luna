@@ -9,8 +9,104 @@ pub enum Atom {
     String(IString),
     Integer(BigInteger),
     Real(BigFloat),
-    Symbol(IString),
-    SExpression(Rc<Vec<Atom>>),
+    Symbol(Symbol),
+    SExpression(SExpression),
+}
+
+impl Atom {
+    // pub fn string(string: impl Into<IString>) -> Self {
+    //     Self::String(string.into())
+    // }
+    //
+    // pub fn symbol(symbol: impl Into<IString>) -> Self {
+    //     Self::Symbol(symbol.into())
+    // }
+
+    /// Gives the symbol under which the properties of this expression would be stored in the
+    /// symbol table.
+    pub fn name(&self) -> Option<Symbol> {
+        match self {
+            Atom::SExpression(_) => self.head().as_symbol().cloned(),
+            Atom::Symbol(name) => Some(*name),
+            _ => None,
+        }
+    }
+
+    pub fn head(&self) -> Self {
+        match self {
+            Self::String(_) => Symbol::new("String").into(),
+            Self::Integer(_) => Symbol::new("Integer").into(),
+            Self::Real(_) => Symbol::new("Real").into(),
+            Self::Symbol(_) => Symbol::new("Symbol").into(),
+            Self::SExpression(sexpr) => sexpr.head(),
+        }
+    }
+
+    pub fn has_head(&self, head: impl Into<Atom>) -> bool {
+        self.head() == head.into()
+    }
+
+    pub fn parts(&self) -> &[Self] {
+        match self {
+            Self::SExpression(sexpr) => sexpr.parts(),
+            _ => &[],
+        }
+    }
+
+    pub fn part(&self, idx: usize) -> Option<&Self> {
+        match self {
+            Self::SExpression(sexpr) => sexpr.part(idx),
+            _ => None,
+        }
+    }
+
+    /// Returns the length of the expression not counting the head.
+    /// Only S-Expressions can have nonzero length.
+    pub fn len(&self) -> usize {
+        match self {
+            Self::SExpression(sexpr) => sexpr.len(),
+            _ => 0,
+        }
+    }
+
+    pub fn is_string(&self) -> bool {
+        matches!(self, Self::String(_))
+    }
+
+    pub fn is_integer(&self) -> bool {
+        matches!(self, Self::Integer(_))
+    }
+
+    pub fn is_real(&self) -> bool {
+        matches!(self, Self::Real(_))
+    }
+
+    pub fn is_symbol(&self) -> bool {
+        matches!(self, Self::Symbol(_))
+    }
+
+    pub fn is_sexpr(&self) -> bool {
+        matches!(self, Self::SExpression(_))
+    }
+
+    // TODO: Figure out a nice naming pattern here
+
+    pub fn as_symbol(&self) -> Option<&Symbol> {
+        match self {
+            Self::Symbol(symbol) => Some(symbol),
+            _ => None,
+        }
+    }
+
+    pub fn as_sexpr_with_head(&self, head: impl Into<Atom>) -> Option<&SExpression> {
+        if let Atom::SExpression(sexpr) = self {
+            if sexpr.head() == head.into() {
+                return Some(sexpr);
+            }
+        }
+
+        None
+    }
 }
 
 // TODO: This is unsafe
@@ -42,7 +138,7 @@ impl Hash for Atom {
 
             Atom::SExpression(v) => {
                 hasher.write(&[72, 5, 244, 86, 5, 210, 69, 30]);
-                for part in v.as_ref() {
+                for part in v.parts() {
                     part.hash(hasher);
                 }
             }
@@ -57,121 +153,85 @@ impl fmt::Display for Atom {
     }
 }
 
-impl Atom {
-    pub fn head(&self) -> Self {
-        match self {
-            Self::SExpression(children) => children[0].clone(),
-            atom => Symbol::from_static_str(atom.kind().into()),
-        }
-    }
-
-    pub fn kind(&self) -> AtomKind {
-        match self {
-            Self::String(_) => AtomKind::String,
-            Self::Integer(_) => AtomKind::Integer,
-            Self::Real(_) => AtomKind::Real,
-            Self::Symbol(_) => AtomKind::Symbol,
-            Self::SExpression(_) => AtomKind::SExpression,
-        }
-    }
-
-    pub fn head_kind(&self) -> AtomKind {
-        match self {
-            Self::SExpression(children) => children[0].kind(),
-            _ => AtomKind::Symbol, // The head of any non-function is a symbol.
-        }
-    }
-
-    /// Gives the symbol (as an `IString`) under which the properties of this
-    /// expression would be stored in the symbol table.
-    pub fn name(&self) -> Option<IString> {
-        match self {
-            Self::SExpression(_) => match self.head() {
-                Self::Symbol(name) => Some(name),
-                _ => None,
-            },
-            Self::Symbol(name) => Some(*name),
-            _ => None,
-        }
-    }
-
-    /// Returns the length of the expression not counting the head.
-    /// Only S-Expressions can have nonzero length.
-    pub fn len(&self) -> usize {
-        match self {
-            Self::String(_) | Self::Integer(_) | Self::Real(_) | Self::Symbol(_) => 0,
-            Self::SExpression(children) => children.len() - 1, // Don't count the head.
-        }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
+impl From<Symbol> for Atom {
+    fn from(value: Symbol) -> Self {
+        Self::Symbol(value)
     }
 }
 
-pub mod Symbol {
-    use crate::Atom;
-    use crate::abstractions::IString;
-
-    pub fn new(name: IString) -> Atom {
-        Atom::Symbol(name)
-    }
-
-    pub fn from_static_str(name: &'static str) -> Atom {
-        Atom::Symbol(IString::from(name))
-    }
-
-    pub fn from_str(name: &str) -> Atom {
-        Atom::Symbol(IString::from(name))
+impl From<SExpression> for Atom {
+    fn from(value: SExpression) -> Self {
+        Self::SExpression(value)
     }
 }
 
-pub(crate) mod SExpression {
-    use crate::Atom;
-    use crate::Symbol;
-    use std::rc::Rc;
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Symbol(IString);
 
-    pub(crate) fn new(head: Atom, mut children: Vec<Atom>) -> Atom {
+impl Symbol {
+    pub fn new(name: impl Into<IString>) -> Self {
+        Self(name.into())
+    }
+}
+
+impl From<Symbol> for IString {
+    fn from(value: Symbol) -> Self {
+        value.0
+    }
+}
+
+impl From<IString> for Symbol {
+    fn from(value: IString) -> Self {
+        Self(value)
+    }
+}
+
+impl From<&str> for Symbol {
+    fn from(value: &str) -> Self {
+        Self(IString::from(value))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct SExpression(Rc<Vec<Atom>>);
+
+impl SExpression {
+    pub fn new(head: impl Into<Atom>, children: impl Into<Vec<Atom>>) -> Self {
+        let mut children = children.into();
+
         let mut new_children = Vec::with_capacity(children.len() + 1);
-        new_children.push(head);
+        new_children.push(head.into());
         new_children.append(&mut children);
 
-        Atom::SExpression(Rc::new(new_children))
+        Self(Rc::new(new_children))
     }
 
-    /// Creates an expression of the form `Blank[]`
-    pub(crate) fn make_blank() -> Atom {
-        Atom::SExpression(Rc::new(vec![Symbol::from_static_str("Blank")]))
+    pub fn apply0(head: impl Into<Atom>) -> Self {
+        Self(Rc::new(vec![head.into()]))
     }
 
-    /// Creates an expression of the form `Pattern[name, Blank[]]`.
-    /// The provided `name` is turned into a symbol.
-    pub(crate) fn make_pattern_blank(name: &'static str) -> Atom {
-        Atom::SExpression(Rc::new(vec![
-            Symbol::from_static_str("Pattern"),
-            Symbol::from_static_str(name),
-            make_blank(),
-        ]))
+    pub fn apply1(head: impl Into<Atom>, a: impl Into<Atom>) -> Self {
+        Self(Rc::new(vec![head.into(), a.into()]))
     }
-}
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum AtomKind {
-    String,
-    Integer,
-    Real,
-    Symbol,
-    SExpression,
-}
+    pub fn apply2(head: impl Into<Atom>, a: impl Into<Atom>, b: impl Into<Atom>) -> Self {
+        Self(Rc::new(vec![head.into(), a.into(), b.into()]))
+    }
 
-impl From<AtomKind> for &'static str {
-    fn from(value: AtomKind) -> Self {
-        match value {
-            AtomKind::String => "String",
-            AtomKind::Integer => "Integer",
-            AtomKind::Real => "Real",
-            AtomKind::Symbol => "Symbol",
-            AtomKind::SExpression => "SExpression",
-        }
+    pub fn head(&self) -> Atom {
+        self.0[0].clone()
+    }
+
+    pub fn parts(&self) -> &[Atom] {
+        &self.0
+    }
+
+    pub fn part(&self, idx: usize) -> Option<&Atom> {
+        self.0.get(idx)
+    }
+
+    pub fn len(&self) -> usize {
+        // Do not count the head
+        self.0.len() - 1
     }
 }

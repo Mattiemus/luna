@@ -1,6 +1,6 @@
 use crate::{Atom, Context};
 
-pub fn evaluate_once(expression: &Atom, context: &mut Context) -> Atom {
+pub fn evaluate(expression: &Atom, context: &mut Context) -> Atom {
     match expression {
         Atom::Symbol(symbol) => {
             todo!()

@@ -1,5 +1,7 @@
 mod matcher;
-mod rule_trivial;
+mod rule_fve;
+mod rule_ive;
+mod rule_t;
 
 use crate::Atom;
 use std::collections::HashMap;
