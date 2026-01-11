@@ -77,7 +77,7 @@ mod tests {
 
     #[test]
     fn rejects_different_strings() {
-        let mut rule = RuleT::try_rule(&MatchEquation {
+        let rule = RuleT::try_rule(&MatchEquation {
             pattern: Atom::string("abc"),
             ground: Atom::string("def"),
         });
@@ -87,7 +87,7 @@ mod tests {
 
     #[test]
     fn rejects_different_symbols() {
-        let mut rule = RuleT::try_rule(&MatchEquation {
+        let rule = RuleT::try_rule(&MatchEquation {
             pattern: Atom::symbol("x"),
             ground: Atom::symbol("y"),
         });

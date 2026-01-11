@@ -1,8 +1,8 @@
 use std::ops::Add;
 
+/// Attribute that can be applied to a symbol.
 #[repr(u32)]
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-
 pub enum Attribute {
     /// Symbol is read only and cannot be changed.
     ReadOnly,
@@ -39,6 +39,8 @@ impl Add<Attribute> for Attribute {
     }
 }
 
+/// Set of `Attribute` values that can be applied to a symbol.
+/// This is implemented as a bitfield.
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Attributes(u32);
 
@@ -102,6 +104,6 @@ impl Add<Attribute> for Attributes {
 
 impl From<Attribute> for Attributes {
     fn from(attribute: Attribute) -> Self {
-        Self(1u32 << attribute as u32)
+        Self(1 << attribute as u32)
     }
 }

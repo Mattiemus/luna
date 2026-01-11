@@ -59,7 +59,7 @@ fn matcher_can_exact_match_symbol() {
 }
 
 #[test]
-fn matcher_can_exact_match_sexpression() {
+fn matcher_can_exact_match_expression() {
     let context = Context::new("UnitTest");
 
     let matcher = Matcher::new(

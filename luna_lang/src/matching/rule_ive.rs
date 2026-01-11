@@ -1,6 +1,6 @@
 use crate::{
     MatchEquation, MatchGenerator, MatchResult, MatchResultList, MatchRule, Substitution,
-    is_any_pattern, is_any_sequence_pattern, is_sequence,
+    is_any_sequence_pattern, is_blank_pattern, is_sequence,
 };
 
 /// Individual variable elimination.
@@ -26,9 +26,9 @@ impl MatchRule for RuleIVE {
         // Pattern: `x_`
         // Ground: Not a sequence or sequence variable.
 
-        if is_any_pattern(&match_equation.pattern).is_some()
-            && is_sequence(&match_equation.ground).is_none()
-            && is_any_sequence_pattern(&match_equation.ground).is_none()
+        if is_blank_pattern(&match_equation.pattern)
+            && is_sequence(&match_equation.ground)
+            && is_any_sequence_pattern(&match_equation.ground)
         {
             Some(RuleIVE::new(match_equation.clone()))
         } else {

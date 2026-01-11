@@ -76,10 +76,10 @@ impl<'c> Matcher<'c> {
             return Ok(Box::new(rule));
         }
 
-        // In order to begin destructuring both `pattern` and `ground` must be S-Expressions and
+        // In order to begin destructuring both `pattern` and `ground` must be an expression and
         // have matching heads.
-        if !match_equation.pattern.is_sexpr()
-            || !match_equation.ground.is_sexpr()
+        if !match_equation.pattern.is_expr()
+            || !match_equation.ground.is_expr()
             || match_equation.pattern.head() != match_equation.ground.head()
         {
             self.equation_stack.push(match_equation);
@@ -278,9 +278,8 @@ impl<'c> Iterator for Matcher<'c> {
             // Apply the rule.
             'step2: loop {
                 match self.match_stack.last_mut() {
-                    // If there is nothing left on the match stack then fail.
                     None => {
-                        return None;
+                        panic!("Expected value on the match stack. Found nothing.")
                     }
 
                     Some(MatchStack::MatchGenerator(match_generator)) => {

@@ -23,8 +23,8 @@ pub struct Substitution {
 }
 
 pub trait MatchRule: Sized + MatchGenerator {
-    /// Checks if this rule applies to the active match equation, constructing a
-    /// generator if it does.
+    /// Checks if this rule applies to the active match equation, constructing a generator if it
+    /// does.
     fn try_rule(match_equation: &MatchEquation) -> Option<Self>;
 }
 
