@@ -1,6 +1,6 @@
 use crate::{
-    MatchEquation, MatchGenerator, MatchResult, MatchResultList, MatchRule, SExpression,
-    Substitution, is_any_pattern,
+    Atom, MatchEquation, MatchGenerator, MatchResult, MatchResultList, MatchRule, Substitution,
+    is_any_pattern,
 };
 
 /// Function variable elimination.
@@ -51,8 +51,8 @@ impl Iterator for RuleFVE {
 
         // Create a substitution of `f_` to `g`.
         let substitution = MatchResult::Substitution(Substitution {
-            variable: self.match_equation.pattern.head(),
-            ground: self.match_equation.ground.head(),
+            variable: self.match_equation.pattern.head().clone(),
+            ground: self.match_equation.ground.head().clone(),
         });
 
         // Next steps are to solve for the arguments of the pattern `<f_>[...]`.
@@ -61,11 +61,10 @@ impl Iterator for RuleFVE {
         //
         // For example `<f_>[a, b, c]` becomes `g[a, b, c]`.
         let new_match_equation = MatchResult::MatchEquation(MatchEquation {
-            pattern: SExpression::new(
-                self.match_equation.ground.head(),
+            pattern: Atom::sexpr(
+                self.match_equation.ground.head().clone(),
                 &self.match_equation.pattern.parts()[1..],
-            )
-            .into(),
+            ),
             ground: self.match_equation.ground.clone(),
         });
 

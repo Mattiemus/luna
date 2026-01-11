@@ -20,7 +20,7 @@ pub fn evaluate(expression: &Atom, context: &mut Context) -> Atom {
             // }
         }
 
-        Atom::SExpression(children) => {
+        Atom::SExpr(children) => {
             todo!()
         }
 

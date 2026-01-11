@@ -1,7 +1,7 @@
 use std::ops::Add;
 
 #[repr(u32)]
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 
 pub enum Attribute {
     /// Symbol is read only and cannot be changed.
@@ -39,7 +39,7 @@ impl Add<Attribute> for Attribute {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct Attributes(u32);
 
 impl Attributes {

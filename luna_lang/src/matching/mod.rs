@@ -10,12 +10,13 @@ pub use matcher::*;
 
 pub type SolutionSet = HashMap<Atom, Atom>;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct MatchEquation {
     pattern: Atom,
     ground: Atom,
 }
 
+#[derive(PartialEq, Debug)]
 pub struct Substitution {
     variable: Atom,
     ground: Atom,
@@ -29,6 +30,7 @@ pub trait MatchRule: Sized + MatchGenerator {
 
 pub type MatchResultList = Vec<MatchResult>;
 
+#[derive(PartialEq, Debug)]
 pub enum MatchResult {
     MatchEquation(MatchEquation),
     Substitution(Substitution),

@@ -1,17 +1,12 @@
-use luna_lang::abstractions::IString;
-use luna_lang::{Atom, BigFloat, BigInteger, SExpression, Symbol};
+use luna_lang::{Atom, BigFloat, BigInteger};
 use luna_lang::{Context, Matcher};
 use std::collections::HashMap;
 
 #[test]
 fn matcher_can_exact_match_string() {
-    let context = Context::new_global_context();
+    let context = Context::new("UnitTest");
 
-    let matcher = Matcher::new(
-        Atom::String(IString::from("abc")),
-        Atom::String(IString::from("abc")),
-        &context,
-    );
+    let matcher = Matcher::new(Atom::string("abc"), Atom::string("abc"), &context);
 
     let matches = matcher.collect::<Vec<_>>();
 
@@ -21,7 +16,7 @@ fn matcher_can_exact_match_string() {
 
 #[test]
 fn matcher_can_exact_match_integer() {
-    let context = Context::new_global_context();
+    let context = Context::new("UnitTest");
 
     let matcher = Matcher::new(
         Atom::Integer(BigInteger::from(123)),
@@ -37,7 +32,7 @@ fn matcher_can_exact_match_integer() {
 
 #[test]
 fn matcher_can_exact_match_real() {
-    let context = Context::new_global_context();
+    let context = Context::new("UnitTest");
 
     let matcher = Matcher::new(
         Atom::Real(BigFloat::with_val(32, 123.456)),
@@ -53,9 +48,9 @@ fn matcher_can_exact_match_real() {
 
 #[test]
 fn matcher_can_exact_match_symbol() {
-    let context = Context::new_global_context();
+    let context = Context::new("UnitTest");
 
-    let matcher = Matcher::new(Symbol::new("x"), Symbol::new("x"), &context);
+    let matcher = Matcher::new(Atom::symbol("x"), Atom::symbol("x"), &context);
 
     let matches = matcher.collect::<Vec<_>>();
 
@@ -65,11 +60,11 @@ fn matcher_can_exact_match_symbol() {
 
 #[test]
 fn matcher_can_exact_match_sexpression() {
-    let context = Context::new_global_context();
+    let context = Context::new("UnitTest");
 
     let matcher = Matcher::new(
-        SExpression::apply1(Symbol::new("f"), Symbol::new("x")),
-        SExpression::apply1(Symbol::new("f"), Symbol::new("x")),
+        Atom::apply1(Atom::symbol("f"), Atom::symbol("x")),
+        Atom::apply1(Atom::symbol("f"), Atom::symbol("x")),
         &context,
     );
 
@@ -81,9 +76,9 @@ fn matcher_can_exact_match_sexpression() {
 
 #[test]
 fn matcher_rejects_inexact_match() {
-    let context = Context::new_global_context();
+    let context = Context::new("UnitTest");
 
-    let matcher = Matcher::new(Symbol::new("x"), Symbol::new("t"), &context);
+    let matcher = Matcher::new(Atom::symbol("x"), Atom::symbol("t"), &context);
 
     let matches = matcher.collect::<Vec<_>>();
 

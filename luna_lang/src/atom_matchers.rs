@@ -1,8 +1,8 @@
-use crate::{Atom, Symbol};
+use crate::{Atom, IString};
 
 /// Matches an atom of the form `Sequence[a, b, ...]`, returning the children `a, b, ...`.
 pub fn is_sequence(atom: &Atom) -> Option<&[Atom]> {
-    if atom.has_head(Symbol::new("Sequence")) {
+    if atom.has_symbol_head("Sequence") {
         return Some(&atom.parts()[1..]);
     }
 
@@ -10,12 +10,12 @@ pub fn is_sequence(atom: &Atom) -> Option<&[Atom]> {
 }
 
 /// Matches an atom of the form `Pattern[symbol, pattern[h]]`, returning `symbol` and `h`.
-pub fn is_pattern(atom: &Atom, pattern: impl Into<Symbol>) -> Option<(&Symbol, Option<&Atom>)> {
-    if let Some(sexpr) = atom.as_sexpr_with_head(Symbol::new("Pattern")) {
-        if let [_, Atom::Symbol(symbol), pat] = sexpr.parts() {
-            if let Some(pat_sexpr) = pat.as_sexpr_with_head(pattern.into()) {
-                return match pat_sexpr.len() {
-                    1 | 2 => Some((symbol, pat_sexpr.part(1))),
+pub fn is_pattern(atom: &Atom, pattern: impl Into<IString>) -> Option<(IString, Option<&Atom>)> {
+    if atom.has_symbol_head("Pattern") {
+        if let [_, Atom::Symbol(symbol), pat] = atom.parts() {
+            if pat.has_symbol_head(pattern) {
+                return match pat.len() {
+                    1 | 2 => Some((*symbol, pat.parts().get(1))),
                     _ => None,
                 };
             }
@@ -32,15 +32,15 @@ pub fn is_pattern(atom: &Atom, pattern: impl Into<Symbol>) -> Option<(&Symbol, O
 /// - `Pattern[symbol, BlankNullSequence[h]]`
 ///
 /// Returning `symbol` and `h`.
-pub fn is_any_pattern(atom: &Atom) -> Option<(&Symbol, Option<&Atom>)> {
-    if atom.has_head(Symbol::new("Pattern")) {
+pub fn is_any_pattern(atom: &Atom) -> Option<(IString, Option<&Atom>)> {
+    if atom.has_symbol_head("Pattern") {
         if let [_, Atom::Symbol(symbol), pat] = atom.parts() {
-            if pat.has_head(Symbol::new("Blank"))
-                || pat.head().has_head(Symbol::new("BlankSequence"))
-                || pat.head().has_head(Symbol::new("BlankNullSequence"))
+            if pat.has_symbol_head("Blank")
+                || pat.head().has_symbol_head("BlankSequence")
+                || pat.head().has_symbol_head("BlankNullSequence")
             {
                 return match pat.len() {
-                    1 | 2 => Some((symbol, pat.part(1))),
+                    1 | 2 => Some((*symbol, pat.parts().get(1))),
                     _ => None,
                 };
             }
@@ -56,14 +56,12 @@ pub fn is_any_pattern(atom: &Atom) -> Option<(&Symbol, Option<&Atom>)> {
 /// - `Pattern[symbol, BlankNullSequence[h]]`
 ///
 /// Returning `symbol` and `h`.
-pub fn is_any_sequence_pattern(atom: &Atom) -> Option<(&Symbol, Option<&Atom>)> {
-    if let Some(sexpr) = atom.as_sexpr_with_head(Symbol::new("Pattern")) {
-        if let [_, Atom::Symbol(symbol), pat] = sexpr.parts() {
-            if pat.has_head(Symbol::new("BlankSequence"))
-                || pat.has_head(Symbol::new("BlankNullSequence"))
-            {
+pub fn is_any_sequence_pattern(atom: &Atom) -> Option<(IString, Option<&Atom>)> {
+    if atom.has_symbol_head("Pattern") {
+        if let [_, Atom::Symbol(symbol), pat] = atom.parts() {
+            if pat.has_symbol_head("BlankSequence") || pat.has_symbol_head("BlankNullSequence") {
                 return match pat.len() {
-                    1 | 2 => Some((symbol, pat.part(1))),
+                    1 | 2 => Some((*symbol, pat.parts().get(1))),
                     _ => None,
                 };
             }

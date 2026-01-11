@@ -1,4 +1,4 @@
-use crate::{Atom, Context, SExpression, SolutionSet, SymbolValue};
+use crate::{Atom, Context, SolutionSet, SymbolValue};
 use crate::{Attribute, parse};
 
 pub type BuiltinFn = fn(Atom, SolutionSet, &Context) -> Atom;
@@ -25,7 +25,7 @@ pub(crate) fn register_head_builtin(context: &mut Context) {
                 built_in: |_, arguments, _| {
                     let expr = &arguments[&parse!("expr_")];
 
-                    expr.head()
+                    expr.head().clone()
                 },
             },
         )
@@ -41,7 +41,7 @@ pub(crate) fn register_head_builtin(context: &mut Context) {
                     let expr = &arguments[&parse!("expr_")];
                     let h = &arguments[&parse!("h_")];
 
-                    SExpression::apply1(h.clone(), expr.head()).into()
+                    Atom::apply1(h.clone(), expr.head().clone())
                 },
             },
         )

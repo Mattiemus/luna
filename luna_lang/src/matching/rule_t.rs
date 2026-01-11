@@ -45,3 +45,53 @@ impl Iterator for RuleT {
         Some(vec![])
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Atom, MatchEquation, MatchRule};
+
+    #[test]
+    fn accepts_equal_strings() {
+        let mut rule = RuleT::try_rule(&MatchEquation {
+            pattern: Atom::string("abc"),
+            ground: Atom::string("abc"),
+        })
+        .unwrap();
+
+        assert_eq!(rule.next(), Some(vec![]));
+        assert_eq!(rule.next(), None);
+    }
+
+    #[test]
+    fn accepts_equal_symbols() {
+        let mut rule = RuleT::try_rule(&MatchEquation {
+            pattern: Atom::symbol("x"),
+            ground: Atom::symbol("x"),
+        })
+        .unwrap();
+
+        assert_eq!(rule.next(), Some(vec![]));
+        assert_eq!(rule.next(), None);
+    }
+
+    #[test]
+    fn rejects_different_strings() {
+        let mut rule = RuleT::try_rule(&MatchEquation {
+            pattern: Atom::string("abc"),
+            ground: Atom::string("def"),
+        });
+
+        assert!(rule.is_none());
+    }
+
+    #[test]
+    fn rejects_different_symbols() {
+        let mut rule = RuleT::try_rule(&MatchEquation {
+            pattern: Atom::symbol("x"),
+            ground: Atom::symbol("y"),
+        });
+
+        assert!(rule.is_none());
+    }
+}

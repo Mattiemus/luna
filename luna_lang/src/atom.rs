@@ -2,61 +2,90 @@ use crate::abstractions::{BigFloat, BigInteger, IString};
 use std::fmt;
 use std::fmt::Formatter;
 use std::hash::{Hash, Hasher};
-use std::rc::Rc;
+use std::sync::{Arc, LazyLock};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum Atom {
     String(IString),
     Integer(BigInteger),
     Real(BigFloat),
-    Symbol(Symbol),
-    SExpression(SExpression),
+    Symbol(IString),
+    SExpr(Arc<Vec<Atom>>),
 }
 
 impl Atom {
-    // pub fn string(string: impl Into<IString>) -> Self {
-    //     Self::String(string.into())
-    // }
-    //
-    // pub fn symbol(symbol: impl Into<IString>) -> Self {
-    //     Self::Symbol(symbol.into())
-    // }
+    pub fn string(string: impl Into<IString>) -> Self {
+        Self::String(string.into())
+    }
+
+    // integer
+    // real
+
+    pub fn symbol(symbol: impl Into<IString>) -> Self {
+        Self::Symbol(symbol.into())
+    }
+
+    pub fn sexpr(head: impl Into<Self>, children: impl Into<Vec<Self>>) -> Self {
+        let mut children = children.into();
+
+        let mut new_children = Vec::with_capacity(children.len() + 1);
+        new_children.push(head.into());
+        new_children.append(&mut children);
+
+        Self::SExpr(Arc::new(new_children))
+    }
+
+    pub fn apply0(head: impl Into<Self>) -> Self {
+        Self::SExpr(Arc::new(vec![head.into()]))
+    }
+
+    pub fn apply1(head: impl Into<Self>, a: impl Into<Self>) -> Self {
+        Self::SExpr(Arc::new(vec![head.into(), a.into()]))
+    }
+
+    pub fn apply2(head: impl Into<Self>, a: impl Into<Self>, b: impl Into<Self>) -> Self {
+        Self::SExpr(Arc::new(vec![head.into(), a.into(), b.into()]))
+    }
 
     /// Gives the symbol under which the properties of this expression would be stored in the
     /// symbol table.
-    pub fn name(&self) -> Option<Symbol> {
+    pub fn name(&self) -> Option<IString> {
         match self {
-            Atom::SExpression(_) => self.head().as_symbol().cloned(),
-            Atom::Symbol(name) => Some(*name),
+            Self::SExpr(_) => self.head().as_symbol(),
+            Self::Symbol(name) => Some(*name),
             _ => None,
         }
     }
 
     pub fn head(&self) -> Self {
         match self {
-            Self::String(_) => Symbol::new("String").into(),
-            Self::Integer(_) => Symbol::new("Integer").into(),
-            Self::Real(_) => Symbol::new("Real").into(),
-            Self::Symbol(_) => Symbol::new("Symbol").into(),
-            Self::SExpression(sexpr) => sexpr.head(),
+            Self::Symbol(_) => Atom::symbol("Symbol"),
+            Self::String(_) => Atom::symbol("String"),
+            Self::Integer(_) => Atom::symbol("Integer"),
+            Self::Real(_) => Atom::symbol("Real"),
+            Self::SExpr(sexpr) => sexpr[0].clone(),
         }
     }
 
-    pub fn has_head(&self, head: impl Into<Atom>) -> bool {
-        self.head() == head.into()
+    pub fn has_symbol_head(&self, head: impl Into<IString>) -> bool {
+        match self.head() {
+            Self::Symbol(symbol) => symbol == head.into(),
+            _ => false,
+        }
     }
 
     pub fn parts(&self) -> &[Self] {
-        match self {
-            Self::SExpression(sexpr) => sexpr.parts(),
-            _ => &[],
-        }
-    }
+        static SYMBOL_PARTS: LazyLock<Vec<Atom>> = LazyLock::new(|| vec![Atom::symbol("Symbol")]);
+        static STRING_PARTS: LazyLock<Vec<Atom>> = LazyLock::new(|| vec![Atom::symbol("String")]);
+        static INTEGER_PARTS: LazyLock<Vec<Atom>> = LazyLock::new(|| vec![Atom::symbol("Integer")]);
+        static REAL_PARTS: LazyLock<Vec<Atom>> = LazyLock::new(|| vec![Atom::symbol("Real")]);
 
-    pub fn part(&self, idx: usize) -> Option<&Self> {
         match self {
-            Self::SExpression(sexpr) => sexpr.part(idx),
-            _ => None,
+            Self::Symbol(_) => &SYMBOL_PARTS,
+            Self::String(_) => &STRING_PARTS,
+            Self::Integer(_) => &INTEGER_PARTS,
+            Self::Real(_) => &REAL_PARTS,
+            Self::SExpr(sexpr) => sexpr,
         }
     }
 
@@ -64,8 +93,15 @@ impl Atom {
     /// Only S-Expressions can have nonzero length.
     pub fn len(&self) -> usize {
         match self {
-            Self::SExpression(sexpr) => sexpr.len(),
+            Self::SExpr(sexpr) => sexpr.len() - 1,
             _ => 0,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Self::SExpr(sexpr) => sexpr.len() == 1,
+            _ => true,
         }
     }
 
@@ -86,59 +122,61 @@ impl Atom {
     }
 
     pub fn is_sexpr(&self) -> bool {
-        matches!(self, Self::SExpression(_))
+        matches!(self, Self::SExpr(_))
     }
 
     // TODO: Figure out a nice naming pattern here
 
-    pub fn as_symbol(&self) -> Option<&Symbol> {
+    pub fn as_symbol(&self) -> Option<IString> {
         match self {
-            Self::Symbol(symbol) => Some(symbol),
+            Self::Symbol(symbol) => Some(*symbol),
             _ => None,
         }
-    }
-
-    pub fn as_sexpr_with_head(&self, head: impl Into<Atom>) -> Option<&SExpression> {
-        if let Atom::SExpression(sexpr) = self {
-            if sexpr.head() == head.into() {
-                return Some(sexpr);
-            }
-        }
-
-        None
     }
 }
 
 // TODO: This is unsafe
 impl Eq for Atom {}
 
-// TODO: This is grim - figure out a better way
 impl Hash for Atom {
     fn hash<H: Hasher>(&self, hasher: &mut H) {
+        // We want two expressions to have different hashes even in cases where they have the same
+        // representation (i.e. strings and symbols). Because of this we also hash a type-specific
+        // prefix prior to hashing the data.
+
+        // These prefixes are taken from expreduce (https://github.com/corywalker/expreduce).
+        // These prefixes were picked at random. We use the same prefixes here.
+
+        const STRING_PREFIX: [u8; 8] = [102, 206, 57, 172, 207, 100, 198, 133];
+        const INTEGER_PREFIX: [u8; 8] = [242, 99, 84, 113, 102, 46, 118, 94];
+        const REAL_PREFIX: [u8; 8] = [195, 244, 76, 249, 227, 115, 88, 251];
+        const SYMBOL_PREFIX: [u8; 8] = [107, 10, 247, 23, 33, 221, 163, 156];
+        const SEXPR_PREFIX: [u8; 8] = [72, 5, 244, 86, 5, 210, 69, 30];
+
         match self {
-            Atom::String(v) => {
-                hasher.write(&[102, 206, 57, 172, 207, 100, 198, 133]);
+            Self::String(v) => {
+                hasher.write(&STRING_PREFIX);
                 v.hash(hasher);
             }
 
-            Atom::Integer(v) => {
-                hasher.write(&[242, 99, 84, 113, 102, 46, 118, 94]);
+            Self::Integer(v) => {
+                hasher.write(&INTEGER_PREFIX);
                 v.to_string().hash(hasher);
             }
 
-            Atom::Real(v) => {
-                hasher.write(&[195, 244, 76, 249, 227, 115, 88, 251]);
+            Self::Real(v) => {
+                hasher.write(&REAL_PREFIX);
                 v.to_string().hash(hasher);
             }
 
-            Atom::Symbol(v) => {
-                hasher.write(&[107, 10, 247, 23, 33, 221, 163, 156]);
+            Self::Symbol(v) => {
+                hasher.write(&SYMBOL_PREFIX);
                 v.hash(hasher);
             }
 
-            Atom::SExpression(v) => {
-                hasher.write(&[72, 5, 244, 86, 5, 210, 69, 30]);
-                for part in v.parts() {
+            Self::SExpr(v) => {
+                hasher.write(&SEXPR_PREFIX);
+                for part in v.as_ref() {
                     part.hash(hasher);
                 }
             }
@@ -146,92 +184,29 @@ impl Hash for Atom {
     }
 }
 
-// TODO: Implement a simple display method
 impl fmt::Display for Atom {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        todo!()
-    }
-}
+        match self {
+            Atom::String(v) => write!(f, "\"{}\"", v),
+            Atom::Integer(v) => write!(f, "{}", v),
+            Atom::Real(v) => write!(f, "{}", v),
+            Atom::Symbol(v) => write!(f, "{}", v),
+            Atom::SExpr(sexpr) => {
+                let mut child_iter = sexpr.iter();
+                let head = child_iter.next().unwrap();
 
-impl From<Symbol> for Atom {
-    fn from(value: Symbol) -> Self {
-        Self::Symbol(value)
-    }
-}
+                write!(f, "{}[", head)?;
 
-impl From<SExpression> for Atom {
-    fn from(value: SExpression) -> Self {
-        Self::SExpression(value)
-    }
-}
+                for (i, arg) in child_iter.enumerate() {
+                    if i > 0 {
+                        write!(f, ", ")?;
+                    }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Symbol(IString);
+                    write!(f, "{}", arg)?;
+                }
 
-impl Symbol {
-    pub fn new(name: impl Into<IString>) -> Self {
-        Self(name.into())
-    }
-}
-
-impl From<Symbol> for IString {
-    fn from(value: Symbol) -> Self {
-        value.0
-    }
-}
-
-impl From<IString> for Symbol {
-    fn from(value: IString) -> Self {
-        Self(value)
-    }
-}
-
-impl From<&str> for Symbol {
-    fn from(value: &str) -> Self {
-        Self(IString::from(value))
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct SExpression(Rc<Vec<Atom>>);
-
-impl SExpression {
-    pub fn new(head: impl Into<Atom>, children: impl Into<Vec<Atom>>) -> Self {
-        let mut children = children.into();
-
-        let mut new_children = Vec::with_capacity(children.len() + 1);
-        new_children.push(head.into());
-        new_children.append(&mut children);
-
-        Self(Rc::new(new_children))
-    }
-
-    pub fn apply0(head: impl Into<Atom>) -> Self {
-        Self(Rc::new(vec![head.into()]))
-    }
-
-    pub fn apply1(head: impl Into<Atom>, a: impl Into<Atom>) -> Self {
-        Self(Rc::new(vec![head.into(), a.into()]))
-    }
-
-    pub fn apply2(head: impl Into<Atom>, a: impl Into<Atom>, b: impl Into<Atom>) -> Self {
-        Self(Rc::new(vec![head.into(), a.into(), b.into()]))
-    }
-
-    pub fn head(&self) -> Atom {
-        self.0[0].clone()
-    }
-
-    pub fn parts(&self) -> &[Atom] {
-        &self.0
-    }
-
-    pub fn part(&self, idx: usize) -> Option<&Atom> {
-        self.0.get(idx)
-    }
-
-    pub fn len(&self) -> usize {
-        // Do not count the head
-        self.0.len() - 1
+                write!(f, "]")
+            }
+        }
     }
 }

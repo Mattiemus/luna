@@ -76,15 +76,12 @@ impl<'c> Matcher<'c> {
             return Ok(Box::new(rule));
         }
 
-        // In order to begin destructuring both `pattern` and `ground` must be S-Expressions.
-        if !match_equation.pattern.is_sexpr() || !match_equation.ground.is_sexpr() {
-            self.equation_stack.push(match_equation);
-            return Err(());
-        }
-
-        // The heads of both `pattern` and `ground` must match for us to perform any sensible
-        // destructuring.
-        if match_equation.pattern.head() != match_equation.ground.head() {
+        // In order to begin destructuring both `pattern` and `ground` must be S-Expressions and
+        // have matching heads.
+        if !match_equation.pattern.is_sexpr()
+            || !match_equation.ground.is_sexpr()
+            || match_equation.pattern.head() != match_equation.ground.head()
+        {
             self.equation_stack.push(match_equation);
             return Err(());
         }
