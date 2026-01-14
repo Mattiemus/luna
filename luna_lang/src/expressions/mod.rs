@@ -1,17 +1,25 @@
-pub mod kind;
-pub mod normal;
-pub mod symbol;
+mod kind;
+mod normal;
+mod symbol;
 
+use crate::OrdBigFloat;
 use crate::abstractions::{BigFloat, BigInteger};
-use crate::expressions::kind::ExprKind;
-use crate::expressions::normal::Normal;
-use crate::symbol::Symbol;
 use std::fmt;
 use std::fmt::Formatter;
 use std::hash::Hash;
 use std::sync::Arc;
-use crate::OrdBigFloat;
 
+pub use kind::ExprKind;
+pub use normal::Normal;
+pub use symbol::Symbol;
+
+/// Representation of an expression node. An expression can be either an "atomic" value (such as
+/// a string, integer, real, or symbol) or a "normal" expression which is of the form
+/// `f[a1, ..., an]` where `f` is the "head" and `a1, ..., an` represents zero or more `elements`
+/// of the expression.
+///
+/// Internally an expression is an `Arc<ExprKind>`. This means cloning and comparisons are cheap by
+/// design to facilitate performant pattern matching.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub struct Expr(Arc<ExprKind>);
 
@@ -136,6 +144,12 @@ impl From<BigInteger> for Expr {
 
 impl From<BigFloat> for Expr {
     fn from(value: BigFloat) -> Self {
+        Self::new(ExprKind::from(value))
+    }
+}
+
+impl From<OrdBigFloat> for Expr {
+    fn from(value: OrdBigFloat) -> Self {
         Self::new(ExprKind::from(value))
     }
 }

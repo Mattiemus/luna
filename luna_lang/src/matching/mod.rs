@@ -1,15 +1,16 @@
 mod matcher;
+mod rule_df;
 mod rule_fve;
 mod rule_ive;
 mod rule_t;
 
 use crate::Expr;
+use crate::Symbol;
 use std::collections::HashMap;
 
-use crate::symbol::Symbol;
-pub use matcher::*;
+pub use matcher::Matcher;
 
-pub type SolutionSet = HashMap<Expr, Expr>;
+pub type SolutionSet = HashMap<Symbol, Expr>;
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct MatchEquation {
@@ -20,7 +21,6 @@ pub struct MatchEquation {
 #[derive(PartialEq, Debug)]
 pub struct Substitution {
     variable: Symbol,
-    pattern: Expr,
     ground: Expr,
 }
 

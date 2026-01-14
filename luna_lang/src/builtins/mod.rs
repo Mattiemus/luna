@@ -1,5 +1,5 @@
-use crate::normal::Normal;
-use crate::symbol::Symbol;
+use crate::Normal;
+use crate::Symbol;
 use crate::{Attribute, SymbolValue, parse};
 use crate::{Context, Expr, SolutionSet};
 
@@ -24,7 +24,7 @@ pub(crate) fn register_head_builtin(context: &mut Context) {
                 pattern: parse!("Head[expr_]"),
                 condition: None,
                 built_in: |_, arguments, _| {
-                    let expr = &arguments[&parse!("expr_")];
+                    let expr = &arguments[&Symbol::new("expr")];
 
                     expr.head().clone()
                 },
@@ -39,8 +39,8 @@ pub(crate) fn register_head_builtin(context: &mut Context) {
                 pattern: parse!("Head[expr_, h_]"),
                 condition: None,
                 built_in: |_, arguments, _| {
-                    let expr = &arguments[&parse!("expr_")];
-                    let h = &arguments[&parse!("h_")];
+                    let expr = &arguments[&Symbol::new("expr")];
+                    let h = &arguments[&Symbol::new("h")];
 
                     Expr::from(Normal::new(h.clone(), vec![expr.head().clone()]))
                 },

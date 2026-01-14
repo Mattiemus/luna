@@ -1,13 +1,12 @@
-use crate::symbol::Symbol;
 use crate::{
     MatchEquation, MatchGenerator, MatchResult, MatchResultList, MatchRule, Substitution,
-    is_any_blank_sequence, is_any_sequence_pattern, is_sequence, parse_blank_pattern,
+    is_sequence, parse_individual_variable,
 };
+use crate::{Symbol, is_any_sequence_variable};
 
 /// Individual variable elimination.
 ///
-/// Matches a pattern `x_` against any value so long as it is not a sequence or sequence variable
-/// (i.e. `__`, `___`, `x__`, `x___`, or `Sequence[...]`).
+/// Matches a pattern `x_` against any value so long as it is not a sequence or sequence variable.
 pub(crate) struct RuleIVE {
     match_equation: MatchEquation,
     variable: Option<Symbol>,
@@ -16,14 +15,11 @@ pub(crate) struct RuleIVE {
 
 impl MatchRule for RuleIVE {
     fn try_rule(match_equation: &MatchEquation) -> Option<Self> {
-        if is_any_blank_sequence(&match_equation.ground)
-            || is_any_sequence_pattern(&match_equation.ground)
-            || is_sequence(&match_equation.ground)
-        {
+        if is_any_sequence_variable(&match_equation.ground) || is_sequence(&match_equation.ground) {
             return None;
         }
 
-        if let Some((variable, _)) = parse_blank_pattern(&match_equation.pattern) {
+        if let Some((variable, _)) = parse_individual_variable(&match_equation.pattern) {
             // TODO: Evaluate constraints for `Blank[h]` and `Pattern[_, Blank[h]]`.
 
             return Some(Self {
@@ -56,7 +52,6 @@ impl Iterator for RuleIVE {
         if let Some(variable) = &self.variable {
             let substitution = MatchResult::Substitution(Substitution {
                 variable: variable.clone(),
-                pattern: self.match_equation.pattern.clone(),
                 ground: self.match_equation.ground.clone(),
             });
 
@@ -89,7 +84,6 @@ mod tests {
             rule.next(),
             Some(vec![MatchResult::Substitution(Substitution {
                 variable: Symbol::new("x"),
-                pattern: parse("x").unwrap(),
                 ground: parse(ground).unwrap(),
             })])
         );

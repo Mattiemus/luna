@@ -1,5 +1,5 @@
+use crate::Symbol;
 use crate::builtins::register_builtins;
-use crate::symbol::Symbol;
 use crate::{Attributes, BuiltinFn, BuiltinFnMut, Expr};
 use std::collections::HashMap;
 
@@ -33,7 +33,7 @@ impl Context {
 
     pub fn get_attributes(&self, symbol: &Symbol) -> Attributes {
         match self.attributes.get(symbol) {
-            None => Attributes::new(),
+            None => Attributes::empty(),
             Some(attributes) => *attributes,
         }
     }

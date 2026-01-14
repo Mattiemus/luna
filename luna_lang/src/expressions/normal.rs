@@ -1,5 +1,5 @@
 use crate::Expr;
-use crate::symbol::Symbol;
+use crate::Symbol;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 
@@ -24,6 +24,10 @@ impl Normal {
 
     pub fn elements(&self) -> &[Expr] {
         &self.elements
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.elements.is_empty()
     }
 
     pub fn has_head(&self, head: &Symbol) -> bool {

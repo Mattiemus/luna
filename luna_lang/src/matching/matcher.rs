@@ -1,4 +1,6 @@
+use crate::Symbol;
 use crate::matching::MatchRule;
+use crate::matching::rule_df::RuleDF;
 use crate::matching::rule_fve::RuleFVE;
 use crate::matching::rule_ive::RuleIVE;
 use crate::matching::rule_t::RuleT;
@@ -17,9 +19,9 @@ enum MatchStack {
     /// to call `next()`.
     MatchGenerator(BoxedMatchGenerator),
 
-    /// A variable or sequence variable substitution. We only need to record the key
-    /// (the expression) of the `SolutionSet` hashmap.
-    Substitution(Expr),
+    /// A variable or sequence variable substitution. We only need to record the name of the
+    /// variable.
+    Substitution(Symbol),
 
     /// An operation representing pushing matching equations onto the equation stack.
     ProducedMatchEquations(usize),
@@ -100,12 +102,12 @@ impl<'c> Matcher<'c> {
                 ) {
                     // Rules for Free Functions (neither associative nor commutative).
                     (false, false) => {
-                        // if let Some(rule) = RuleDecF::try_rule(&match_equation) {
-                        //   return Ok(Box::new(rule));
-                        // }
-                        //
+                        if let Some(rule) = RuleDF::try_rule(&match_equation) {
+                            return Some(Box::new(rule));
+                        }
+
                         // if let Some(rule) = RuleSVEF::try_rule(&match_equation) {
-                        //   return Ok(Box::new(rule));
+                        //   return Some(Box::new(rule));
                         // }
 
                         self.equation_stack.push(match_equation);
@@ -115,11 +117,11 @@ impl<'c> Matcher<'c> {
                     // Rules for commutative functions.
                     (true, false) => {
                         // if let Some(rule) = RuleDecC::try_rule(&match_equation) {
-                        //     return Ok(Box::new(rule));
+                        //     return Some(Box::new(rule));
                         // }
                         //
                         // if let Some(rule) = RuleSVEC::try_rule(&match_equation) {
-                        //     return Ok(Box::new(rule));
+                        //     return Some(Box::new(rule));
                         // }
 
                         self.equation_stack.push(match_equation);
@@ -129,19 +131,19 @@ impl<'c> Matcher<'c> {
                     // Rules for associative functions.
                     (false, true) => {
                         // if let Some(rule) = RuleSVEA::try_rule(&match_equation) {
-                        //     return Ok(Box::new(rule));
+                        //     return Some(Box::new(rule));
                         // }
                         //
                         // if let Some(rule) = RuleFVEA::try_rule(&match_equation) {
-                        //     return Ok(Box::new(rule));
+                        //     return Some(Box::new(rule));
                         // }
                         //
                         // if let Some(rule) = RuleIVEA::try_rule(&match_equation) {
-                        //     return Ok(Box::new(rule));
+                        //     return Some(Box::new(rule));
                         // }
                         //
                         // if let Some(rule) = RuleDecA::try_rule(&match_equation) {
-                        //     return Ok(Box::new(rule));
+                        //     return Some(Box::new(rule));
                         // }
 
                         self.equation_stack.push(match_equation);
@@ -151,19 +153,19 @@ impl<'c> Matcher<'c> {
                     // Rules for associative-commutative symbols.
                     (true, true) => {
                         // if let Some(rule) = RuleSVEAC::try_rule(&match_equation) {
-                        //     return Ok(Box::new(rule));
+                        //     return Some(Box::new(rule));
                         // }
                         //
                         // if let Some(rule) = RuleFVEAC::try_rule(&match_equation) {
-                        //     return Ok(Box::new(rule));
+                        //     return Some(Box::new(rule));
                         // }
                         //
                         // if let Some(rule) = RuleIVEAC::try_rule(&match_equation) {
-                        //     return Ok(Box::new(rule));
+                        //     return Some(Box::new(rule));
                         // }
                         //
                         // if let Some(rule) = RuleDecAC::try_rule(&match_equation) {
-                        //     return Ok(Box::new(rule));
+                        //     return Some(Box::new(rule));
                         // }
 
                         self.equation_stack.push(match_equation);
@@ -235,18 +237,11 @@ impl<'c> Matcher<'c> {
         self.match_stack.push(MatchStack::MatchGenerator(generator));
     }
 
-    fn push_substitution(
-        &mut self,
-        Substitution {
-            pattern, ground, ..
-        }: Substitution,
-    ) {
-        // TODO: Fix this.
-
-        self.substitutions.insert(pattern.clone(), ground.clone());
+    fn push_substitution(&mut self, Substitution { variable, ground }: Substitution) {
+        self.substitutions.insert(variable.clone(), ground.clone());
 
         self.match_stack
-            .push(MatchStack::Substitution(pattern.clone()));
+            .push(MatchStack::Substitution(variable.clone()));
     }
 
     fn push_match_equations(&mut self, equation_count: usize) {
@@ -346,5 +341,115 @@ impl<'c> Iterator for Matcher<'c> {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parse;
+    use test_case::test_case;
+
+    #[test_case("\"abc\"", "\"def\"" ; "mismatched strings")]
+    #[test_case("123", "456" ; "mismatched integers")]
+    #[test_case("2.5", "8.75" ; "mismatched reals")]
+    #[test_case("abc", "def" ; "mismatched symbols")]
+    #[test_case("f[a, b, c]", "g[a, b, c]" ; "mismatched expression heads")]
+    fn unmatchable_expressions_gives_no_solutions(pattern: &str, ground: &str) {
+        let context = Context::new();
+
+        let mut matcher = Matcher::new(parse(pattern).unwrap(), parse(ground).unwrap(), &context);
+
+        assert_eq!(matcher.next(), None);
+    }
+
+    #[test_case("\"abc\"" ; "strings")]
+    #[test_case("123" ; "integers")]
+    #[test_case("2.5" ; "reals")]
+    #[test_case("abc" ; "symbols")]
+    #[test_case("f[a, b, c]" ; "expressions")]
+    fn exact_matches_gives_single_empty_solution(pattern: &str) {
+        let context = Context::new();
+
+        let mut matcher = Matcher::new(parse(pattern).unwrap(), parse(pattern).unwrap(), &context);
+
+        assert_eq!(matcher.next(), Some(HashMap::new()));
+        assert_eq!(matcher.next(), None);
+    }
+
+    mod free_functions {
+        use super::*;
+        use test_case::test_case;
+
+        #[test_case("f[a, b, c]", "g[a, b, c]" ; "mismatched expression heads")]
+        #[test_case("f[a, b, c]", "f[d, e, f]" ; "mismatched expression elements")]
+        fn unmatchable_expressions_gives_no_solutions(pattern: &str, ground: &str) {
+            let context = Context::new();
+
+            let mut matcher =
+                Matcher::new(parse(pattern).unwrap(), parse(ground).unwrap(), &context);
+
+            assert_eq!(matcher.next(), None);
+        }
+
+        #[test_case("f[_, b, c]", "f[a, b, c]" ; "in first element")]
+        #[test_case("f[a, _, c]", "f[a, b, c]" ; "in second element")]
+        #[test_case("f[a, b, _]", "f[a, b, c]" ; "in third element")]
+        #[test_case("f[_, _, c]", "f[a, b, c]" ; "in first and second elements")]
+        #[test_case("f[a, _, _]", "f[a, b, c]" ; "in second and third elements")]
+        #[test_case("f[_, b, _]", "f[a, b, c]" ; "in first and third elements")]
+        #[test_case("f[_, _, _]", "f[a, b, c]" ; "in all elements")]
+        fn handles__blank_unnamed_variables(pattern: &str, ground: &str) {
+            let context = Context::new();
+
+            let mut matcher =
+                Matcher::new(parse(pattern).unwrap(), parse(ground).unwrap(), &context);
+
+            assert_eq!(matcher.next(), Some(HashMap::new()));
+            assert_eq!(matcher.next(), None);
+        }
+
+        #[test_case("f[x_, b, c]", "f[a, b, c]", "a" ; "in first element")]
+        #[test_case("f[a, x_, c]", "f[a, b, c]", "b" ; "in second element")]
+        #[test_case("f[a, b, x_]", "f[a, b, c]", "c" ; "in third element")]
+        fn handles_single_blank_named_variable(pattern: &str, ground: &str, x: &str) {
+            let context = Context::new();
+
+            let mut matcher =
+                Matcher::new(parse(pattern).unwrap(), parse(ground).unwrap(), &context);
+
+            assert_eq!(
+                matcher.next(),
+                Some(HashMap::from([(Symbol::new("x"), parse(x).unwrap())]))
+            );
+            assert_eq!(matcher.next(), None);
+        }
+
+        #[test_case("f[x_, y_, c]", "f[a, b, c]", "a", "b" ; "in first and second elements")]
+        #[test_case("f[x_, b, y_]", "f[a, b, c]", "a", "c" ; "in first and third elements")]
+        #[test_case("f[a, y_, x_]", "f[a, b, c]", "c", "b" ; "in second and third elements")]
+        fn handles_two_blank_named_variables(pattern: &str, ground: &str, x: &str, y: &str) {
+            let context = Context::new();
+
+            let mut matcher =
+                Matcher::new(parse(pattern).unwrap(), parse(ground).unwrap(), &context);
+
+            assert_eq!(
+                matcher.next(),
+                Some(HashMap::from([
+                    (Symbol::new("x"), parse(x).unwrap()),
+                    (Symbol::new("y"), parse(y).unwrap()),
+                ]))
+            );
+            assert_eq!(matcher.next(), None);
+        }
+
+        // TODO: f[__]
+        // TODO: f[___]
+
+        // TODO: f[x_, x_, c]
+
+        // TODO: f_[a, b, c]
+        // TODO: f_[x_ b, c]
     }
 }

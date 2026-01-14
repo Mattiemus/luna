@@ -1,5 +1,5 @@
 use crate::Expr;
-use crate::symbol::Symbol;
+use crate::Symbol;
 
 /// Matches an expression of the form `Sequence[___]`.
 pub fn is_sequence(expr: &Expr) -> bool {
@@ -48,13 +48,13 @@ pub fn try_blank_pattern(expr: &Expr) -> Option<(&Symbol, Option<&Expr>)> {
     None
 }
 
-/// Parses an expression of the following forms:
+/// Parses an expression of any the following forms:
 ///
 /// - `Blank[]`
 /// - `Blank[h]`
 /// - `Pattern[sym, Blank[]]`
 /// - `Pattern[sym, Blank[h]]`
-pub fn parse_blank_pattern(expr: &Expr) -> Option<(Option<&Symbol>, Option<&Expr>)> {
+pub fn parse_individual_variable(expr: &Expr) -> Option<(Option<&Symbol>, Option<&Expr>)> {
     if let Some(h) = try_blank(&expr) {
         return Some((None, h));
     }
@@ -72,14 +72,27 @@ pub fn parse_blank_pattern(expr: &Expr) -> Option<(Option<&Symbol>, Option<&Expr
 /// - `BlankSequence[h]`
 /// - `BlankNullSequence[]`
 /// - `BlankNullSequence[h]`
+/// - `Pattern[sym, BlankSequence[]]`
+/// - `Pattern[sym, BlankSequence[h]]`
+/// - `Pattern[sym, BlankNullSequence[]]`
+/// - `Pattern[sym, BlankNullSequence[h]]`
+pub fn is_any_sequence_variable(expr: &Expr) -> bool {
+    is_any_blank_sequence(expr) || is_any_sequence_pattern(expr)
+}
+
+/// Matches an expression of any the following forms:
+///
+/// - `BlankSequence[]`
+/// - `BlankSequence[h]`
+/// - `BlankNullSequence[]`
+/// - `BlankNullSequence[h]`
 pub fn is_any_blank_sequence(expr: &Expr) -> bool {
     if let Some(v) = expr.try_normal() {
-        if !matches!(v.elements().len(), 1 | 2) {
-            return false;
+        if v.has_head(&Symbol::new("BlankSequence"))
+            || v.has_head(&Symbol::new("BlankNullSequence"))
+        {
+            return matches!(v.elements().len(), 0 | 1);
         }
-
-        return v.has_head(&Symbol::new("BlankSequence"))
-            || v.has_head(&Symbol::new("BlankNullSequence"));
     }
 
     false

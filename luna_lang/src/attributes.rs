@@ -45,7 +45,7 @@ impl Add<Attribute> for Attribute {
 pub struct Attributes(u32);
 
 impl Attributes {
-    pub fn new() -> Self {
+    pub fn empty() -> Self {
         Self(0)
     }
 
@@ -80,7 +80,7 @@ impl Attributes {
 
 impl Default for Attributes {
     fn default() -> Self {
-        Self(0)
+        Self::empty()
     }
 }
 

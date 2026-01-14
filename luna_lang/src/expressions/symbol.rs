@@ -5,7 +5,7 @@ use std::fmt;
 pub struct Symbol(IString);
 
 impl Symbol {
-    pub fn new(value: &'static str) -> Self {
+    pub fn new(value: &str) -> Self {
         Self(IString::from(value))
     }
 }

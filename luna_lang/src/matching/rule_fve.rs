@@ -1,13 +1,13 @@
-use crate::normal::Normal;
-use crate::symbol::Symbol;
+use crate::Normal;
+use crate::Symbol;
 use crate::{
     Expr, MatchEquation, MatchGenerator, MatchResult, MatchResultList, MatchRule, Substitution,
-    parse_blank_pattern,
+    parse_individual_variable,
 };
 
 /// Function variable elimination.
 ///
-/// Matches a pattern `f_[...]` against a value `g[...]`.
+/// Matches a pattern `f_[___]` against a value `g[___]`.
 pub(crate) struct RuleFVE {
     pattern: Normal,
     ground: Normal,
@@ -21,7 +21,7 @@ impl MatchRule for RuleFVE {
             match_equation.pattern.try_normal(),
             match_equation.ground.try_normal(),
         ) {
-            if let Some((variable, _)) = parse_blank_pattern(p.head()) {
+            if let Some((variable, _)) = parse_individual_variable(p.head()) {
                 // TODO: Evaluate constraints for `Blank[h]` and `Pattern[_, Blank[h]]`.
 
                 return Some(Self {
@@ -72,11 +72,10 @@ impl Iterator for RuleFVE {
         if let Some(variable) = &self.variable {
             let substitution = MatchResult::Substitution(Substitution {
                 variable: variable.clone(),
-                pattern: Expr::from(self.pattern.head().clone()),
                 ground: Expr::from(self.ground.head().clone()),
             });
 
-            return Some(vec![substitution, new_match_equation]);
+            return Some(vec![new_match_equation, substitution]);
         }
 
         Some(vec![new_match_equation])
@@ -89,12 +88,12 @@ mod tests {
     use crate::{MatchEquation, MatchRule, parse};
     use test_case::test_case;
 
-    #[test_case("\"abc\"[a, b, c]", "\"abc\"" ; "string")]
-    #[test_case("123[a, b, c]", "123" ; "integer")]
-    #[test_case("1.25[a, b, c]", "1.25" ; "real")]
-    #[test_case("abc[a, b, c]", "abc" ; "symbol")]
-    #[test_case("f[a,b, c][x, y, z]", "f[a, b, c]" ; "expression")]
-    fn matches_head_named_variable(ground: &str, substitution: &str) {
+    #[test_case("\"abc\"[a, b, c]", "\"abc\"[___]", "\"abc\"" ; "string")]
+    #[test_case("123[a, b, c]", "123[___]", "123" ; "integer")]
+    #[test_case("1.25[a, b, c]", "1.25[___]", "1.25" ; "real")]
+    #[test_case("abc[a, b, c]", "abc[___]", "abc" ; "symbol")]
+    #[test_case("f[a, b, c][x, y, z]", "f[a, b, c][___]", "f[a, b, c]" ; "expression")]
+    fn matches_head_named_variable(ground: &str, next_pattern: &str, substitution: &str) {
         let mut rule = RuleFVE::try_rule(&MatchEquation {
             pattern: parse("x_[___]").unwrap(),
             ground: parse(ground).unwrap(),
@@ -104,14 +103,13 @@ mod tests {
         assert_eq!(
             rule.next(),
             Some(vec![
+                MatchResult::MatchEquation(MatchEquation {
+                    pattern: parse(next_pattern).unwrap(),
+                    ground: parse(ground).unwrap(),
+                }),
                 MatchResult::Substitution(Substitution {
                     variable: Symbol::new("x"),
-                    pattern: parse("x_").unwrap(),
                     ground: parse(substitution).unwrap(),
-                }),
-                MatchResult::MatchEquation(MatchEquation {
-                    pattern: parse(ground).unwrap(),
-                    ground: parse(ground).unwrap(),
                 })
             ])
         );
@@ -119,12 +117,12 @@ mod tests {
         assert_eq!(rule.next(), None);
     }
 
-    #[test_case("\"abc\"[a, b, c]" ; "string")]
-    #[test_case("123[a, b, c]" ; "integer")]
-    #[test_case("1.25[a, b, c]" ; "real")]
-    #[test_case("abc[a, b, c]" ; "symbol")]
-    #[test_case("f[a,b, c][x, y, z]" ; "expression")]
-    fn matches_head_unnamed_variable(ground: &str) {
+    #[test_case("\"abc\"[a, b, c]", "\"abc\"[___]" ; "string")]
+    #[test_case("123[a, b, c]", "123[___]" ; "integer")]
+    #[test_case("1.25[a, b, c]", "1.25[___]" ; "real")]
+    #[test_case("abc[a, b, c]", "abc[___]" ; "symbol")]
+    #[test_case("f[a, b, c][x, y, z]", "f[a, b, c][___]" ; "expression")]
+    fn matches_head_unnamed_variable(ground: &str, next_pattern: &str) {
         let mut rule = RuleFVE::try_rule(&MatchEquation {
             pattern: parse("_[___]").unwrap(),
             ground: parse(ground).unwrap(),
@@ -134,7 +132,7 @@ mod tests {
         assert_eq!(
             rule.next(),
             Some(vec![MatchResult::MatchEquation(MatchEquation {
-                pattern: parse(ground).unwrap(),
+                pattern: parse(next_pattern).unwrap(),
                 ground: parse(ground).unwrap(),
             })])
         );

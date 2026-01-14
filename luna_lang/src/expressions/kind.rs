@@ -1,5 +1,5 @@
+use crate::Symbol;
 use crate::expressions::normal::Normal;
-use crate::symbol::Symbol;
 use crate::{BigFloat, BigInteger, OrdBigFloat};
 use std::fmt;
 use std::fmt::Formatter;
