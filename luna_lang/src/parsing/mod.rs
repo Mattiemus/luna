@@ -1,4 +1,4 @@
-use crate::Atom;
+use crate::Expr;
 
 // TODO: It would be useful to be able to parse at compile-time
 #[macro_export]
@@ -9,6 +9,6 @@ macro_rules! parse {
 }
 
 // TODO
-pub fn parse(s: &str) -> Result<Atom, ()> {
+pub fn parse(_s: &str) -> Result<Expr, ()> {
     Err(())
 }

@@ -3,7 +3,7 @@ use crate::matching::rule_fve::RuleFVE;
 use crate::matching::rule_ive::RuleIVE;
 use crate::matching::rule_t::RuleT;
 use crate::{
-    Atom, Context, MatchEquation, MatchGenerator, MatchResult, MatchResultList, SolutionSet,
+    Context, Expr, MatchEquation, MatchGenerator, MatchResult, MatchResultList, SolutionSet,
     Substitution,
 };
 use std::collections::HashMap;
@@ -19,7 +19,7 @@ enum MatchStack {
 
     /// A variable or sequence variable substitution. We only need to record the key
     /// (the expression) of the `SolutionSet` hashmap.
-    Substitution(Atom),
+    Substitution(Expr),
 
     /// An operation representing pushing matching equations onto the equation stack.
     ProducedMatchEquations(usize),
@@ -41,7 +41,7 @@ pub struct Matcher<'c> {
 }
 
 impl<'c> Matcher<'c> {
-    pub fn new(pattern: impl Into<Atom>, subject: impl Into<Atom>, context: &'c Context) -> Self {
+    pub fn new(pattern: impl Into<Expr>, subject: impl Into<Expr>, context: &'c Context) -> Self {
         Self {
             context,
             match_stack: Vec::new(),
@@ -55,117 +55,126 @@ impl<'c> Matcher<'c> {
 
     /// Check which rule applies to the active match equation, creates the match generator for that
     /// rule, and pushes the match generator onto the match stack.
-    fn select_rule(&mut self) -> Result<BoxedMatchGenerator, ()> {
-        // Nothing to select.
-        if self.equation_stack.is_empty() {
-            return Err(());
-        }
-
-        // TODO: Substitute bound variables with their values.
-        let match_equation = self.equation_stack.pop().unwrap();
+    fn select_rule(&mut self) -> Option<BoxedMatchGenerator> {
+        // TODO: Substitute bound variables with their values. This probably should NOT happen here
+        //  though as we would otherwise be rebuilding `match_equation` on every evaluation step.
+        let match_equation = match self.equation_stack.pop() {
+            Some(match_equation) => match_equation,
+            None => return None,
+        };
 
         if let Some(rule) = RuleT::try_rule(&match_equation) {
-            return Ok(Box::new(rule));
+            return Some(Box::new(rule));
         }
 
         if let Some(rule) = RuleIVE::try_rule(&match_equation) {
-            return Ok(Box::new(rule));
+            return Some(Box::new(rule));
         }
 
         if let Some(rule) = RuleFVE::try_rule(&match_equation) {
-            return Ok(Box::new(rule));
+            return Some(Box::new(rule));
         }
 
-        // In order to begin destructuring both `pattern` and `ground` must be an expression and
-        // have matching heads.
-        if !match_equation.pattern.is_expr()
-            || !match_equation.ground.is_expr()
-            || match_equation.pattern.head() != match_equation.ground.head()
-        {
-            self.equation_stack.push(match_equation);
-            return Err(());
-        }
-
-        let ground_attributes = self
-            .context
-            .get_attributes(match_equation.ground.name().unwrap());
-
-        match (
-            ground_attributes.commutative(),
-            ground_attributes.associative(),
+        // At this point we next need to perform destructuring type operations. This requests both
+        // `pattern` and `ground` to be expressions.
+        if let (Some(p), Some(g)) = (
+            match_equation.pattern.try_normal(),
+            match_equation.ground.try_normal(),
         ) {
-            // Rules for Free Functions (neither associative nor commutative)
-            (false, false) => {
-                // if let Some(rule) = RuleDecF::try_rule(&match_equation) {
-                //   return Ok(Box::new(rule));
-                // }
-                //
-                // if let Some(rule) = RuleSVEF::try_rule(&match_equation) {
-                //   return Ok(Box::new(rule));
-                // }
+            // TODO: Need to be able to match `f[...][...]` to `g[...][...]`. Will need to add
+            //  rules to destructure the head in this case. This should be recursive to support
+            //  operations like `f[...][...][...]` etc.
 
-                self.equation_stack.push(match_equation);
-                Err(())
-            }
+            // Attempting to match `f[...]` with `g[...]' where `f` and `g` are symbols and match.
+            if let (Some(phead), Some(ghead)) = (p.try_head_symbol(), g.try_head_symbol()) {
+                if phead != ghead {
+                    self.equation_stack.push(match_equation);
+                    return None;
+                }
 
-            // Rules for commutative functions
-            (true, false) => {
-                // if let Some(rule) = RuleDecC::try_rule(&match_equation) {
-                //     return Ok(Box::new(rule));
-                // }
-                //
-                // if let Some(rule) = RuleSVEC::try_rule(&match_equation) {
-                //     return Ok(Box::new(rule));
-                // }
+                let ground_attributes = self.context.get_attributes(ghead);
 
-                self.equation_stack.push(match_equation);
-                Err(())
-            }
+                match (
+                    ground_attributes.commutative(),
+                    ground_attributes.associative(),
+                ) {
+                    // Rules for Free Functions (neither associative nor commutative).
+                    (false, false) => {
+                        // if let Some(rule) = RuleDecF::try_rule(&match_equation) {
+                        //   return Ok(Box::new(rule));
+                        // }
+                        //
+                        // if let Some(rule) = RuleSVEF::try_rule(&match_equation) {
+                        //   return Ok(Box::new(rule));
+                        // }
 
-            // Rules for associative functions
-            (false, true) => {
-                // if let Some(rule) = RuleSVEA::try_rule(&match_equation) {
-                //     return Ok(Box::new(rule));
-                // }
-                //
-                // if let Some(rule) = RuleFVEA::try_rule(&match_equation) {
-                //     return Ok(Box::new(rule));
-                // }
-                //
-                // if let Some(rule) = RuleIVEA::try_rule(&match_equation) {
-                //     return Ok(Box::new(rule));
-                // }
-                //
-                // if let Some(rule) = RuleDecA::try_rule(&match_equation) {
-                //     return Ok(Box::new(rule));
-                // }
+                        self.equation_stack.push(match_equation);
+                        return None;
+                    }
 
-                self.equation_stack.push(match_equation);
-                Err(())
-            }
+                    // Rules for commutative functions.
+                    (true, false) => {
+                        // if let Some(rule) = RuleDecC::try_rule(&match_equation) {
+                        //     return Ok(Box::new(rule));
+                        // }
+                        //
+                        // if let Some(rule) = RuleSVEC::try_rule(&match_equation) {
+                        //     return Ok(Box::new(rule));
+                        // }
 
-            // Rules for associative-commutative symbols.
-            (true, true) => {
-                // if let Some(rule) = RuleSVEAC::try_rule(&match_equation) {
-                //     return Ok(Box::new(rule));
-                // }
-                //
-                // if let Some(rule) = RuleFVEAC::try_rule(&match_equation) {
-                //     return Ok(Box::new(rule));
-                // }
-                //
-                // if let Some(rule) = RuleIVEAC::try_rule(&match_equation) {
-                //     return Ok(Box::new(rule));
-                // }
-                //
-                // if let Some(rule) = RuleDecAC::try_rule(&match_equation) {
-                //     return Ok(Box::new(rule));
-                // }
+                        self.equation_stack.push(match_equation);
+                        return None;
+                    }
 
-                self.equation_stack.push(match_equation);
-                Err(())
+                    // Rules for associative functions.
+                    (false, true) => {
+                        // if let Some(rule) = RuleSVEA::try_rule(&match_equation) {
+                        //     return Ok(Box::new(rule));
+                        // }
+                        //
+                        // if let Some(rule) = RuleFVEA::try_rule(&match_equation) {
+                        //     return Ok(Box::new(rule));
+                        // }
+                        //
+                        // if let Some(rule) = RuleIVEA::try_rule(&match_equation) {
+                        //     return Ok(Box::new(rule));
+                        // }
+                        //
+                        // if let Some(rule) = RuleDecA::try_rule(&match_equation) {
+                        //     return Ok(Box::new(rule));
+                        // }
+
+                        self.equation_stack.push(match_equation);
+                        return None;
+                    }
+
+                    // Rules for associative-commutative symbols.
+                    (true, true) => {
+                        // if let Some(rule) = RuleSVEAC::try_rule(&match_equation) {
+                        //     return Ok(Box::new(rule));
+                        // }
+                        //
+                        // if let Some(rule) = RuleFVEAC::try_rule(&match_equation) {
+                        //     return Ok(Box::new(rule));
+                        // }
+                        //
+                        // if let Some(rule) = RuleIVEAC::try_rule(&match_equation) {
+                        //     return Ok(Box::new(rule));
+                        // }
+                        //
+                        // if let Some(rule) = RuleDecAC::try_rule(&match_equation) {
+                        //     return Ok(Box::new(rule));
+                        // }
+
+                        self.equation_stack.push(match_equation);
+                        return None;
+                    }
+                }
             }
         }
+
+        self.equation_stack.push(match_equation);
+        None
     }
 
     /// Undoes the effects of the last call to `next()`, removes the match generator, and
@@ -226,11 +235,18 @@ impl<'c> Matcher<'c> {
         self.match_stack.push(MatchStack::MatchGenerator(generator));
     }
 
-    fn push_substitution(&mut self, Substitution { variable, ground }: Substitution) {
-        self.substitutions.insert(variable.clone(), ground.clone());
+    fn push_substitution(
+        &mut self,
+        Substitution {
+            pattern, ground, ..
+        }: Substitution,
+    ) {
+        // TODO: Fix this.
+
+        self.substitutions.insert(pattern.clone(), ground.clone());
 
         self.match_stack
-            .push(MatchStack::Substitution(variable.clone()));
+            .push(MatchStack::Substitution(pattern.clone()));
     }
 
     fn push_match_equations(&mut self, equation_count: usize) {
@@ -253,14 +269,14 @@ impl<'c> Iterator for Matcher<'c> {
             // Attempt to select a rule to apply
             match self.select_rule() {
                 // We have found a rule to apply.
-                Ok(match_generator) => {
+                Some(match_generator) => {
                     // Push the `MatchGenerator` onto the match stack.
                     // It is now the active `MatchGenerator`.
                     self.push_rule(match_generator);
                 }
 
                 // No rule applies.
-                Err(_) => {
+                None => {
                     // If the match stack is empty, halt with failure.
                     if self.match_stack.is_empty() {
                         return None;

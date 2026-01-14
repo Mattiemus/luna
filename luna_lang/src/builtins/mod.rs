@@ -1,13 +1,14 @@
-use crate::{Atom, Context, SolutionSet, SymbolValue};
-use crate::{Attribute, parse};
+use crate::normal::Normal;
+use crate::symbol::Symbol;
+use crate::{Attribute, SymbolValue, parse};
+use crate::{Context, Expr, SolutionSet};
 
-pub type BuiltinFn = fn(Atom, SolutionSet, &Context) -> Atom;
-pub type BuiltinFnMut = fn(Atom, SolutionSet, &mut Context) -> Atom;
+pub type BuiltinFn = fn(Expr, SolutionSet, &Context) -> Expr;
+pub type BuiltinFnMut = fn(Expr, SolutionSet, &mut Context) -> Expr;
 
 /// Registers all builtins.
 pub(crate) fn register_builtins(context: &mut Context) {
-    // TODO: This should register built ins once we have a simple parser ready.
-    // register_head_builtin(context);
+    register_head_builtin(context);
 }
 
 /// Registers the `Head` builtin symbol.
@@ -18,7 +19,7 @@ pub(crate) fn register_builtins(context: &mut Context) {
 pub(crate) fn register_head_builtin(context: &mut Context) {
     context
         .set_down_value(
-            "Head",
+            &Symbol::new("Head"),
             SymbolValue::BuiltIn {
                 pattern: parse!("Head[expr_]"),
                 condition: None,
@@ -33,7 +34,7 @@ pub(crate) fn register_head_builtin(context: &mut Context) {
 
     context
         .set_down_value(
-            "Head",
+            &Symbol::new("Head"),
             SymbolValue::BuiltIn {
                 pattern: parse!("Head[expr_, h_]"),
                 condition: None,
@@ -41,13 +42,16 @@ pub(crate) fn register_head_builtin(context: &mut Context) {
                     let expr = &arguments[&parse!("expr_")];
                     let h = &arguments[&parse!("h_")];
 
-                    Atom::apply1(h.clone(), expr.head().clone())
+                    Expr::from(Normal::new(h.clone(), vec![expr.head().clone()]))
                 },
             },
         )
         .unwrap();
 
     context
-        .set_attributes("Head", Attribute::ReadOnly + Attribute::AttributesReadOnly)
+        .set_attributes(
+            &Symbol::new("Head"),
+            Attribute::ReadOnly + Attribute::AttributesReadOnly,
+        )
         .unwrap();
 }

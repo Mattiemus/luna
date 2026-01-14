@@ -1,19 +1,17 @@
-use crate::abstractions::IString;
 use crate::builtins::register_builtins;
-use crate::{Atom, Attributes, BuiltinFn, BuiltinFnMut};
+use crate::symbol::Symbol;
+use crate::{Attributes, BuiltinFn, BuiltinFnMut, Expr};
 use std::collections::HashMap;
 
 pub struct Context {
-    name: IString,
-    attributes: HashMap<IString, Attributes>,
-    definitions: HashMap<IString, SymbolDefinition>,
+    attributes: HashMap<Symbol, Attributes>,
+    definitions: HashMap<Symbol, SymbolDefinition>,
     state_version: usize,
 }
 
 impl Context {
-    pub fn new(name: impl Into<IString>) -> Self {
+    pub fn new() -> Self {
         Self {
-            name: name.into(),
             attributes: HashMap::new(),
             definitions: HashMap::new(),
             state_version: 0,
@@ -22,7 +20,6 @@ impl Context {
 
     pub fn new_global_context() -> Self {
         let mut context = Self {
-            name: IString::from("Global"),
             attributes: HashMap::new(),
             definitions: HashMap::new(),
             state_version: 0,
@@ -34,8 +31,8 @@ impl Context {
         context
     }
 
-    pub fn get_attributes(&self, symbol: impl Into<IString>) -> Attributes {
-        match self.attributes.get(&symbol.into()) {
+    pub fn get_attributes(&self, symbol: &Symbol) -> Attributes {
+        match self.attributes.get(symbol) {
             None => Attributes::new(),
             Some(attributes) => *attributes,
         }
@@ -43,37 +40,29 @@ impl Context {
 
     pub fn set_attributes(
         &mut self,
-        symbol: impl Into<IString>,
+        symbol: &Symbol,
         new_attributes: Attributes,
     ) -> Result<(), String> {
-        let symbol = symbol.into();
-
         let attributes = self.get_attributes(symbol);
         if attributes.attributes_read_only() {
             return Err(format!("Symbol '{}' has read-only attributes", symbol));
         }
 
-        self.attributes.insert(symbol, new_attributes);
+        self.attributes.insert(symbol.clone(), new_attributes);
         Ok(())
     }
 
-    pub fn get_definition(&self, symbol: impl Into<IString>) -> Option<&SymbolDefinition> {
-        self.definitions.get(&symbol.into())
+    pub fn get_definition(&self, symbol: &Symbol) -> Option<&SymbolDefinition> {
+        self.definitions.get(&symbol)
     }
 
-    pub fn get_definition_mut(&mut self, symbol: impl Into<IString>) -> &mut SymbolDefinition {
+    pub fn get_definition_mut(&mut self, symbol: &Symbol) -> &mut SymbolDefinition {
         self.definitions
-            .entry(symbol.into())
-            .or_insert_with(|| SymbolDefinition::empty())
+            .entry(symbol.clone())
+            .or_insert_with(|| SymbolDefinition::new())
     }
 
-    pub fn set_own_value(
-        &mut self,
-        symbol: impl Into<IString>,
-        value: SymbolValue,
-    ) -> Result<(), String> {
-        let symbol = symbol.into();
-
+    pub fn set_own_value(&mut self, symbol: &Symbol, value: SymbolValue) -> Result<(), String> {
         let attributes = self.get_attributes(symbol);
         if attributes.read_only() {
             return Err(format!("Symbol '{}' is read-only", symbol));
@@ -90,13 +79,7 @@ impl Context {
         Ok(())
     }
 
-    pub fn set_up_value(
-        &mut self,
-        symbol: impl Into<IString>,
-        value: SymbolValue,
-    ) -> Result<(), String> {
-        let symbol = symbol.into();
-
+    pub fn set_up_value(&mut self, symbol: &Symbol, value: SymbolValue) -> Result<(), String> {
         let attributes = self.get_attributes(symbol);
         if attributes.read_only() {
             return Err(format!("Symbol '{}' is read-only", symbol));
@@ -113,13 +96,7 @@ impl Context {
         Ok(())
     }
 
-    pub fn set_down_value(
-        &mut self,
-        symbol: impl Into<IString>,
-        value: SymbolValue,
-    ) -> Result<(), String> {
-        let symbol = symbol.into();
-
+    pub fn set_down_value(&mut self, symbol: &Symbol, value: SymbolValue) -> Result<(), String> {
         let attributes = self.get_attributes(symbol);
         if attributes.read_only() {
             return Err(format!("Symbol '{}' is read-only", symbol));
@@ -136,13 +113,7 @@ impl Context {
         Ok(())
     }
 
-    pub fn set_sub_value(
-        &mut self,
-        symbol: impl Into<IString>,
-        value: SymbolValue,
-    ) -> Result<(), String> {
-        let symbol = symbol.into();
-
+    pub fn set_sub_value(&mut self, symbol: &Symbol, value: SymbolValue) -> Result<(), String> {
         let attributes = self.get_attributes(symbol);
         if attributes.read_only() {
             return Err(format!("Symbol '{}' is read-only", symbol));
@@ -159,9 +130,7 @@ impl Context {
         Ok(())
     }
 
-    pub fn clear_symbol(&mut self, symbol: impl Into<IString>) -> Result<(), String> {
-        let symbol = symbol.into();
-
+    pub fn clear_symbol(&mut self, symbol: &Symbol) -> Result<(), String> {
         let attributes = self.get_attributes(symbol);
         if attributes.read_only() {
             return Err(format!("Symbol {} is read-only", symbol));
@@ -196,7 +165,7 @@ pub struct SymbolDefinition {
 }
 
 impl SymbolDefinition {
-    pub fn empty() -> Self {
+    pub fn new() -> Self {
         Self {
             own_values: Vec::new(),
             up_values: Vec::new(),
@@ -211,18 +180,18 @@ impl SymbolDefinition {
 /// The wrapper provides convenience methods and stores the expression that originally created the value.
 pub enum SymbolValue {
     Definitions {
-        pattern: Atom,
-        condition: Option<Atom>,
-        ground: Atom,
+        pattern: Expr,
+        condition: Option<Expr>,
+        ground: Expr,
     },
     BuiltIn {
-        pattern: Atom,
-        condition: Option<Atom>,
+        pattern: Expr,
+        condition: Option<Expr>,
         built_in: BuiltinFn,
     },
     BuiltInMut {
-        pattern: Atom,
-        condition: Option<Atom>,
+        pattern: Expr,
+        condition: Option<Expr>,
         built_in: BuiltinFnMut,
     },
 }

@@ -15,7 +15,7 @@ pub enum Attribute {
     /// This indicates that the order of the inputs do not matter.
     /// For example `f[x, y]` and `f[y, x]` are equivalent.
     ///
-    /// During evaluation inputs will be sorted.
+    /// During evaluation arguments will be sorted.
     /// For example `f[c, b, a]` will be evaluated into `f[a, b, c]`.
     Commutative,
 
@@ -24,7 +24,7 @@ pub enum Attribute {
     /// This indicates that nested applications of the symbol can be performed in any order.
     /// For example `f[x, f[y, z]]` and `f[f[x, y], z]` are equivalent.
     ///
-    /// During evaluation inputs will be flattened.
+    /// During evaluation arguments will be flattened.
     /// For example `f[x, f[y, z]]` will be evaluated into `f[x, y, z]`.
     Associative,
 }

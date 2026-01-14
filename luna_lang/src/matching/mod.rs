@@ -3,23 +3,25 @@ mod rule_fve;
 mod rule_ive;
 mod rule_t;
 
-use crate::Atom;
+use crate::Expr;
 use std::collections::HashMap;
 
+use crate::symbol::Symbol;
 pub use matcher::*;
 
-pub type SolutionSet = HashMap<Atom, Atom>;
+pub type SolutionSet = HashMap<Expr, Expr>;
 
 #[derive(Clone, PartialEq, Debug)]
 pub struct MatchEquation {
-    pattern: Atom,
-    ground: Atom,
+    pattern: Expr,
+    ground: Expr,
 }
 
 #[derive(PartialEq, Debug)]
 pub struct Substitution {
-    variable: Atom,
-    ground: Atom,
+    variable: Symbol,
+    pattern: Expr,
+    ground: Expr,
 }
 
 pub trait MatchRule: Sized + MatchGenerator {
