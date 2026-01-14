@@ -2,6 +2,8 @@ mod matcher;
 mod rule_df;
 mod rule_fve;
 mod rule_ive;
+mod rule_sve;
+mod rule_svef;
 mod rule_t;
 
 use crate::Expr;

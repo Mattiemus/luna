@@ -5,8 +5,8 @@ use crate::{
 
 /// Decomposition under a free head.
 ///
-/// Matches a pattern `f[x, ___]` against a value `g[y, ___]` where `f` is a free function.
-/// The value of `x` must not be a sequence or sequence variable.
+/// Matches a pattern `f[x, ...]` against a value `g[y, ...]` where `f` is a free function.
+/// The value of `x` must not be a sequence variable.
 ///
 /// Assumptions:
 /// - `f` is a free function.
@@ -65,8 +65,8 @@ impl Iterator for RuleDF {
             ground: self.ground.elements()[0].clone(),
         });
 
-        // Match equation to attempt to match the rest of the function parameters, i.e. `f[___]`
-        // and `g[___]`.
+        // Match equation to attempt to match the rest of the function parameters, i.e. `f[...]`
+        // and `g[...]`.
         let result_function_equation = MatchResult::MatchEquation(MatchEquation {
             pattern: Expr::from(Normal::new(
                 self.pattern.head().clone(),
@@ -81,5 +81,3 @@ impl Iterator for RuleDF {
         Some(vec![result_variable_equation, result_function_equation])
     }
 }
-
-// TODO: Add some tests

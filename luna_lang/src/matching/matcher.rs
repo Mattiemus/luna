@@ -3,6 +3,8 @@ use crate::matching::MatchRule;
 use crate::matching::rule_df::RuleDF;
 use crate::matching::rule_fve::RuleFVE;
 use crate::matching::rule_ive::RuleIVE;
+use crate::matching::rule_sve::RuleSVE;
+use crate::matching::rule_svef::RuleSVEF;
 use crate::matching::rule_t::RuleT;
 use crate::{
     Context, Expr, MatchEquation, MatchGenerator, MatchResult, MatchResultList, SolutionSet,
@@ -73,6 +75,10 @@ impl<'c> Matcher<'c> {
             return Some(Box::new(rule));
         }
 
+        if let Some(rule) = RuleSVE::try_rule(&match_equation) {
+            return Some(Box::new(rule));
+        }
+
         if let Some(rule) = RuleFVE::try_rule(&match_equation) {
             return Some(Box::new(rule));
         }
@@ -106,9 +112,9 @@ impl<'c> Matcher<'c> {
                             return Some(Box::new(rule));
                         }
 
-                        // if let Some(rule) = RuleSVEF::try_rule(&match_equation) {
-                        //   return Some(Box::new(rule));
-                        // }
+                        if let Some(rule) = RuleSVEF::try_rule(&match_equation) {
+                            return Some(Box::new(rule));
+                        }
 
                         self.equation_stack.push(match_equation);
                         return None;
@@ -355,6 +361,7 @@ mod tests {
     #[test_case("2.5", "8.75" ; "mismatched reals")]
     #[test_case("abc", "def" ; "mismatched symbols")]
     #[test_case("f[a, b, c]", "g[a, b, c]" ; "mismatched expression heads")]
+    #[test_case("__", "Sequence[]" ; "blank sequence does not match sequence of length 0")]
     fn unmatchable_expressions_gives_no_solutions(pattern: &str, ground: &str) {
         let context = Context::new();
 
@@ -363,19 +370,36 @@ mod tests {
         assert_eq!(matcher.next(), None);
     }
 
-    #[test_case("\"abc\"" ; "strings")]
-    #[test_case("123" ; "integers")]
-    #[test_case("2.5" ; "reals")]
-    #[test_case("abc" ; "symbols")]
-    #[test_case("f[a, b, c]" ; "expressions")]
-    fn exact_matches_gives_single_empty_solution(pattern: &str) {
+    #[test_case("\"abc\"", "\"abc\"" ; "strings")]
+    #[test_case("123", "123" ; "integers")]
+    #[test_case("2.5", "2.5" ; "reals")]
+    #[test_case("abc", "abc" ; "symbols")]
+    #[test_case("f[a, b, c]", "f[a, b, c]" ; "expressions")]
+    #[test_case("_", "\"abc\"" ; "blank matches string")]
+    #[test_case("_", "123" ; "blank matches integer")]
+    #[test_case("_", "2.5" ; "blank matches real")]
+    #[test_case("_", "abc" ; "blank matches symbol")]
+    #[test_case("_", "f[a, b, c]" ; "blank matches expression")]
+    #[test_case("_", "Sequence[]" ; "blank matches sequence of length 0")]
+    #[test_case("_", "Sequence[a]" ; "blank matches sequence of length 1")]
+    #[test_case("_", "Sequence[a, b]" ; "blank matches sequence of length 2")]
+    #[test_case("__", "Sequence[a]" ; "blank sequence matches sequence of length 1")]
+    #[test_case("__", "Sequence[a, b]" ; "blank sequence matches sequence of length 2")]
+    #[test_case("__", "Sequence[a, b, c]" ; "blank sequence matches sequence of length 3")]
+    #[test_case("___", "Sequence[]" ; "blank null sequence matches sequence of length 0")]
+    #[test_case("___", "Sequence[a]" ; "blank null sequence matches sequence of length 1")]
+    #[test_case("___", "Sequence[a, b]" ; "blank null sequence matches sequence of length 2")]
+    #[test_case("___", "Sequence[a, b, c]" ; "blank null sequence matches sequence of length 3")]
+    fn exact_matches_gives_single_empty_solution(pattern: &str, ground: &str) {
         let context = Context::new();
 
-        let mut matcher = Matcher::new(parse(pattern).unwrap(), parse(pattern).unwrap(), &context);
+        let mut matcher = Matcher::new(parse(pattern).unwrap(), parse(ground).unwrap(), &context);
 
         assert_eq!(matcher.next(), Some(HashMap::new()));
         assert_eq!(matcher.next(), None);
     }
+
+    // TODO: Tests for FVE `f_[a, b, c]` and `f[a, b, c]`.
 
     mod free_functions {
         use super::*;
@@ -383,6 +407,7 @@ mod tests {
 
         #[test_case("f[a, b, c]", "g[a, b, c]" ; "mismatched expression heads")]
         #[test_case("f[a, b, c]", "f[d, e, f]" ; "mismatched expression elements")]
+        #[test_case("f[__]", "f[]" ; "cannot match __ to empty sequence")]
         fn unmatchable_expressions_gives_no_solutions(pattern: &str, ground: &str) {
             let context = Context::new();
 
@@ -399,7 +424,7 @@ mod tests {
         #[test_case("f[a, _, _]", "f[a, b, c]" ; "in second and third elements")]
         #[test_case("f[_, b, _]", "f[a, b, c]" ; "in first and third elements")]
         #[test_case("f[_, _, _]", "f[a, b, c]" ; "in all elements")]
-        fn handles__blank_unnamed_variables(pattern: &str, ground: &str) {
+        fn handles_blank_unnamed_variables(pattern: &str, ground: &str) {
             let context = Context::new();
 
             let mut matcher =
@@ -444,6 +469,8 @@ mod tests {
             assert_eq!(matcher.next(), None);
         }
 
+        // TODO: Create some tests for sequences
+
         // TODO: f[__]
         // TODO: f[___]
 
@@ -451,5 +478,39 @@ mod tests {
 
         // TODO: f_[a, b, c]
         // TODO: f_[x_ b, c]
+
+        #[test]
+        fn test() {
+            let context = Context::new();
+
+            let mut matcher = Matcher::new(
+                parse("f[xs___, ys___]").unwrap(),
+                parse("f[a, b]").unwrap(),
+                &context,
+            );
+
+            assert_eq!(
+                matcher.next(),
+                Some(HashMap::from([
+                    (Symbol::new("xs"), parse("Sequence[]").unwrap()),
+                    (Symbol::new("ys"), parse("Sequence[a, b]").unwrap())
+                ]))
+            );
+            assert_eq!(
+                matcher.next(),
+                Some(HashMap::from([
+                    (Symbol::new("xs"), parse("Sequence[a]").unwrap()),
+                    (Symbol::new("ys"), parse("Sequence[b]").unwrap())
+                ]))
+            );
+            assert_eq!(
+                matcher.next(),
+                Some(HashMap::from([
+                    (Symbol::new("xs"), parse("Sequence[a, b]").unwrap()),
+                    (Symbol::new("ys"), parse("Sequence[]").unwrap())
+                ]))
+            );
+            assert_eq!(matcher.next(), None);
+        }
     }
 }

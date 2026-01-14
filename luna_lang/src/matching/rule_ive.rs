@@ -1,12 +1,12 @@
+use crate::Symbol;
 use crate::{
     MatchEquation, MatchGenerator, MatchResult, MatchResultList, MatchRule, Substitution,
-    is_sequence, parse_individual_variable,
+    parse_individual_variable,
 };
-use crate::{Symbol, is_any_sequence_variable};
 
 /// Individual variable elimination.
 ///
-/// Matches a pattern `x_` against any value so long as it is not a sequence or sequence variable.
+/// Matches a pattern `x_` against any value.
 pub(crate) struct RuleIVE {
     match_equation: MatchEquation,
     variable: Option<Symbol>,
@@ -15,10 +15,6 @@ pub(crate) struct RuleIVE {
 
 impl MatchRule for RuleIVE {
     fn try_rule(match_equation: &MatchEquation) -> Option<Self> {
-        if is_any_sequence_variable(&match_equation.ground) || is_sequence(&match_equation.ground) {
-            return None;
-        }
-
         if let Some((variable, _)) = parse_individual_variable(&match_equation.pattern) {
             // TODO: Evaluate constraints for `Blank[h]` and `Pattern[_, Blank[h]]`.
 
@@ -59,66 +55,5 @@ impl Iterator for RuleIVE {
         }
 
         Some(vec![])
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::{MatchEquation, MatchRule, parse};
-    use test_case::test_case;
-
-    #[test_case("\"abc\"" ; "string")]
-    #[test_case("123" ; "integer")]
-    #[test_case("1.25" ; "real")]
-    #[test_case("abc" ; "symbol")]
-    #[test_case("f[a, b, c]" ; "expression")]
-    fn matches_named_variable(ground: &str) {
-        let mut rule = RuleIVE::try_rule(&MatchEquation {
-            pattern: parse("x_").unwrap(),
-            ground: parse(ground).unwrap(),
-        })
-        .unwrap();
-
-        assert_eq!(
-            rule.next(),
-            Some(vec![MatchResult::Substitution(Substitution {
-                variable: Symbol::new("x"),
-                ground: parse(ground).unwrap(),
-            })])
-        );
-
-        assert_eq!(rule.next(), None);
-    }
-
-    #[test_case("\"abc\"" ; "string")]
-    #[test_case("123" ; "integer")]
-    #[test_case("1.25" ; "real")]
-    #[test_case("abc" ; "symbol")]
-    #[test_case("f[a, b, c]" ; "expression")]
-    fn matches_unnamed_variable(ground: &str) {
-        let mut rule = RuleIVE::try_rule(&MatchEquation {
-            pattern: parse("_").unwrap(),
-            ground: parse(ground).unwrap(),
-        })
-        .unwrap();
-
-        assert_eq!(rule.next(), Some(vec![]));
-        assert_eq!(rule.next(), None);
-    }
-
-    #[test_case("abc", "abc" ; "pattern is not variable")]
-    #[test_case("_", "Sequence[a, b, c]" ; "ground is a sequence")]
-    #[test_case("_", "__" ; "ground is blank sequence")]
-    #[test_case("_", "___" ; "ground is blank null sequence")]
-    #[test_case("_", "x__" ; "ground is blank sequence pattern")]
-    #[test_case("_", "x___" ; "ground is blank null sequence pattern")]
-    fn does_not_match(pattern: &str, ground: &str) {
-        let rule = RuleIVE::try_rule(&MatchEquation {
-            pattern: parse(pattern).unwrap(),
-            ground: parse(ground).unwrap(),
-        });
-
-        assert!(rule.is_none());
     }
 }
