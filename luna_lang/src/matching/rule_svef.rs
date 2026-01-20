@@ -5,7 +5,7 @@ use crate::{
 
 /// Sequence variable elimination under a free head.
 ///
-/// Matches a pattern `f[x__, ...]` or `f[x___, ...]` against a value `g[y, ...]` where `f` is a
+/// Matches a pattern `f[x__, ...]` or `f[x___, ...]` against a value `g[...]` where `f` is a
 /// free function.
 ///
 /// Assumptions:
@@ -19,7 +19,7 @@ pub(crate) struct RuleSVEF {
     /// Have we produced the empty sequence as the first result yet?
     empty_produced: bool,
 
-    /// A `Sequence`, holds the terms of the ground that we have attempted to match against so far.
+    /// Holds the terms of the ground that we have attempted to match against so far.
     ground_sequence: Vec<Expr>,
 }
 

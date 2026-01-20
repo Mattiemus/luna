@@ -175,9 +175,7 @@ impl SymbolDefinition {
     }
 }
 
-/// A `SymbolValue` is a wrapper for `RuleDelayed` used for storing the rule in a symbol table
-/// as an own/up/down/sub value.
-/// The wrapper provides convenience methods and stores the expression that originally created the value.
+/// A `SymbolValue` is a wrapper used for storing the rule in a symbol table as an own/up/down/sub value.
 pub enum SymbolValue {
     Definitions {
         pattern: Expr,

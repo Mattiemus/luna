@@ -5,7 +5,7 @@ use std::fmt;
 use std::fmt::Formatter;
 use std::hash::{Hash, Hasher};
 
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ExprKind {
     String(String),
     Integer(BigInteger),
@@ -97,6 +97,12 @@ impl Hash for ExprKind {
                 v.hash(hasher);
             }
         }
+    }
+}
+
+impl fmt::Debug for ExprKind {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
     }
 }
 

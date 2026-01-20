@@ -20,12 +20,16 @@ pub use symbol::Symbol;
 ///
 /// Internally an expression is an `Arc<ExprKind>`. This means cloning and comparisons are cheap by
 /// design to facilitate performant pattern matching.
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Expr(Arc<ExprKind>);
 
 impl Expr {
     pub fn new(kind: ExprKind) -> Self {
         Self(Arc::new(kind))
+    }
+
+    pub fn kind(&self) -> &ExprKind {
+        self.0.as_ref()
     }
 
     /// Returns the outermost symbol "tag" used in this expression.
@@ -163,6 +167,12 @@ impl From<Symbol> for Expr {
 impl From<Normal> for Expr {
     fn from(value: Normal) -> Self {
         Self::new(ExprKind::from(value))
+    }
+}
+
+impl fmt::Debug for Expr {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(self, f)
     }
 }
 
