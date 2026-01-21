@@ -1,10 +1,11 @@
-use crate::matching::function_application::{AFAGenerator, FunctionApplicationGenerator};
+use crate::matching::function_application::{AFACGenerator, AFAGenerator, FunctionApplicationGenerator};
 use crate::{
     Expr, MatchEquation, MatchGenerator, MatchResult, MatchResultList, MatchRule, Normal,
     Substitution, Symbol, parse_any_sequence_variable,
 };
 
 pub type RuleSVEA = RuleSVE<AFAGenerator>;
+pub type RuleSVEAC = RuleSVE<AFACGenerator>;
 
 pub(crate) struct RuleSVE<T>
 where
@@ -22,17 +23,15 @@ where
     T: FunctionApplicationGenerator,
 {
     fn make_next(&self, ordered_sequence: Vec<Expr>) -> MatchResultList {
-        let match_equation_ground = Expr::from(Normal::new(
-            self.ground.head().clone(),
-            &self.ground.elements()[self.ground_sequence.len()..],
-        ));
-
         let result_equation = MatchResult::MatchEquation(MatchEquation {
             pattern: Expr::from(Normal::new(
                 self.pattern.head().clone(),
                 &self.pattern.elements()[1..],
             )),
-            ground: match_equation_ground,
+            ground: Expr::from(Normal::new(
+                self.ground.head().clone(),
+                &self.ground.elements()[self.ground_sequence.len()..],
+            )),
         });
 
         if let Some(variable) = &self.variable {

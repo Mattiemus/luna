@@ -3,7 +3,7 @@ use crate::matching::MatchRule;
 use crate::matching::rule_dc::RuleDC;
 use crate::matching::rule_dnc::RuleDNC;
 use crate::matching::rule_fve::RuleFVE;
-use crate::matching::rule_sve::RuleSVEA;
+use crate::matching::rule_sve::{RuleSVEA, RuleSVEAC};
 use crate::matching::rule_svec::RuleSVEC;
 use crate::matching::rule_svef::RuleSVEF;
 use crate::matching::rule_t::RuleT;
@@ -147,7 +147,10 @@ impl<'c> Matcher<'c> {
 
                     // Rules for associative-commutative symbols.
                     (true, true) => {
-                        // if let Some(rule) = RuleSVEAC::try_rule(&match_equation) {
+                        if let Some(rule) = RuleSVEAC::try_rule(&match_equation) {
+                            return Some(Box::new(rule));
+                        }
+
                         // if let Some(rule) = RuleFVEAC::try_rule(&match_equation) {
                         // if let Some(rule) = RuleIVEAC::try_rule(&match_equation) {
 
@@ -773,6 +776,60 @@ mod tests {
     mod associative_commutative {
         use super::*;
 
-        // TODO
+        // Unmatchable cases
+        matcher_test!(mismatched_heads, "fac[a, b, c]", "g[a, b, c]", []);
+        matcher_test!(extra_param, "fac[a, b]", "fac[a, b, c]", []);
+        matcher_test!(blank_seq_empty, "fac[__]", "fac[]", []);
+
+        // Multiple blank sequence variables
+        matcher_test!(
+            multiple_blank_sequences,
+            "fac[xs__, ys__]",
+            "fac[a, b, c]",
+            [
+                {"xs" => "Sequence[a]", "ys" => "Sequence[b, c]"},
+                {"xs" => "Sequence[a]", "ys" => "Sequence[fac[b], c]"},
+                {"xs" => "Sequence[a]", "ys" => "Sequence[b, fac[c]]"},
+                {"xs" => "Sequence[a]", "ys" => "Sequence[fac[b], fac[c]]"},
+                {"xs" => "Sequence[a]", "ys" => "Sequence[fac[b, c]]"},
+                {"xs" => "Sequence[a]", "ys" => "Sequence[c, b]"},
+                {"xs" => "Sequence[a]", "ys" => "Sequence[fac[c], b]"},
+                {"xs" => "Sequence[a]", "ys" => "Sequence[c, fac[b]]"},
+                {"xs" => "Sequence[a]", "ys" => "Sequence[fac[c], fac[b]]"},
+                {"xs" => "Sequence[a]", "ys" => "Sequence[fac[c, b]]"},
+                {"xs" => "Sequence[fac[a]]", "ys" => "Sequence[b, c]"},
+                {"xs" => "Sequence[fac[a]]", "ys" => "Sequence[fac[b], c]"},
+                {"xs" => "Sequence[fac[a]]", "ys" => "Sequence[b, fac[c]]"},
+                {"xs" => "Sequence[fac[a]]", "ys" => "Sequence[fac[b], fac[c]]"},
+                {"xs" => "Sequence[fac[a]]", "ys" => "Sequence[fac[b, c]]"},
+                {"xs" => "Sequence[fac[a]]", "ys" => "Sequence[c, b]"},
+                {"xs" => "Sequence[fac[a]]", "ys" => "Sequence[fac[c], b]"},
+                {"xs" => "Sequence[fac[a]]", "ys" => "Sequence[c, fac[b]]"},
+                {"xs" => "Sequence[fac[a]]", "ys" => "Sequence[fac[c], fac[b]]"},
+                {"xs" => "Sequence[fac[a]]", "ys" => "Sequence[fac[c, b]]"},
+                {"xs" => "Sequence[a, b]", "ys" => "Sequence[c]"},
+                {"xs" => "Sequence[a, b]", "ys" => "Sequence[fac[c]]"},
+                {"xs" => "Sequence[fac[a], b]", "ys" => "Sequence[c]"},
+                {"xs" => "Sequence[fac[a], b]", "ys" => "Sequence[fac[c]]"},
+                {"xs" => "Sequence[a, fac[b]]", "ys" => "Sequence[c]"},
+                {"xs" => "Sequence[a, fac[b]]", "ys" => "Sequence[fac[c]]"},
+                {"xs" => "Sequence[fac[a], fac[b]]", "ys" => "Sequence[c]"},
+                {"xs" => "Sequence[fac[a], fac[b]]", "ys" => "Sequence[fac[c]]"},
+                {"xs" => "Sequence[fac[a, b]]", "ys" => "Sequence[c]"},
+                {"xs" => "Sequence[fac[a, b]]", "ys" => "Sequence[fac[c]]"},
+                {"xs" => "Sequence[b, a]", "ys" => "Sequence[c]"},
+                {"xs" => "Sequence[b, a]", "ys" => "Sequence[fac[c]]"},
+                {"xs" => "Sequence[fac[b], a]", "ys" => "Sequence[c]"},
+                {"xs" => "Sequence[fac[b], a]", "ys" => "Sequence[fac[c]]"},
+                {"xs" => "Sequence[b, fac[a]]", "ys" => "Sequence[c]"},
+                {"xs" => "Sequence[b, fac[a]]", "ys" => "Sequence[fac[c]]"},
+                {"xs" => "Sequence[fac[b], fac[a]]", "ys" => "Sequence[c]"},
+                {"xs" => "Sequence[fac[b], fac[a]]", "ys" => "Sequence[fac[c]]"},
+                {"xs" => "Sequence[fac[b, a]]", "ys" => "Sequence[c]"},
+                {"xs" => "Sequence[fac[b, a]]", "ys" => "Sequence[fac[c]]"},
+
+                // TODO: Where is `b` on `xs`?
+            ]
+        );
     }
 }
