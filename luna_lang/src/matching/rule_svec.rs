@@ -39,11 +39,7 @@ impl MatchRule for RuleSVEC {
                         ground: g.clone(),
                         variable: variable.cloned(),
                         subset: if matches_empty { 0 } else { 1 },
-                        permutations: PermutationGenerator32::new(if matches_empty {
-                            0
-                        } else {
-                            1
-                        }),
+                        permutations: PermutationGenerator32::new(1),
                     });
                 }
             }
@@ -66,36 +62,52 @@ impl Iterator for RuleSVEC {
     type Item = MatchResultList;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let n = self.ground.len();
-        if n > 31 {
-            panic!("RuleSVEC currently only supports up to 31 elements in ground");
+        if self.subset == 0 {
+            self.subset = 1;
+
+            let match_equation = MatchResult::MatchEquation(MatchEquation {
+                pattern: Expr::from(Normal::new(
+                    self.pattern.head().clone(),
+                    &self.pattern.elements()[1..],
+                )),
+                ground: Expr::from(self.ground.clone()),
+            });
+
+            if let Some(variable) = &self.variable {
+                let substitution = MatchResult::Substitution(Substitution {
+                    variable: variable.clone(),
+                    ground: Expr::from(Normal::new(Symbol::new("Sequence"), vec![])),
+                });
+
+                return Some(vec![match_equation, substitution]);
+            }
+
+            return Some(vec![match_equation]);
         }
 
-        let max_subset_state = ((1 << n) - 1) as u32;
+        if self.subset == 1 && self.ground.is_empty() {
+            return None;
+        }
 
         let permutation = match self.permutations.next() {
             Some(permutation) => permutation,
             None => {
-                if self.subset == max_subset_state {
+                if let Some(next_subset) = next_subset(self.ground.len() as u32, self.subset) {
+                    self.subset = next_subset;
+                    self.permutations = PermutationGenerator32::new(self.subset.count_ones() as u8);
+                    self.permutations.next()?
+                } else {
                     return None;
                 }
-
-                self.subset += 1;
-                self.permutations = PermutationGenerator32::new(self.subset.count_ones() as u8);
-                self.permutations.next()?
             }
         };
-
-        if self.ground.is_empty() && self.subset != 0 {
-            return None;
-        }
 
         let mut subset = Vec::with_capacity(self.ground.len());
         let mut complement = Vec::with_capacity(self.ground.len());
 
         for (k, c) in self.ground.elements().iter().enumerate() {
             if ((1 << k) as u32 & self.subset) != 0 {
-                subset.push(c.clone());
+                subset.push(c);
             } else {
                 complement.push(c.clone());
             }
@@ -115,7 +127,7 @@ impl Iterator for RuleSVEC {
                 ground: Expr::from(Normal::new(
                     Symbol::new("Sequence"),
                     permutation
-                        .map(|idx| subset[idx as usize].clone())
+                        .map(|idx| subset[idx].clone())
                         .collect::<Vec<_>>(),
                 )),
             });
@@ -125,4 +137,26 @@ impl Iterator for RuleSVEC {
 
         Some(vec![match_equation])
     }
+}
+
+pub(crate) fn next_subset(n: u32, subset: u32) -> Option<u32> {
+    let max = 1 << n;
+
+    if subset == 0 {
+        return if n != 0 { Some(1) } else { None };
+    }
+
+    let c = subset & (!subset + 1);
+    let r = subset + c;
+    let next = ((r ^ subset) >> 2) / c | r;
+    if next < max {
+        return Some(next);
+    }
+
+    let bits = subset.count_ones();
+    if bits < n {
+        return Some((1 << (bits + 1)) - 1);
+    }
+
+    None
 }

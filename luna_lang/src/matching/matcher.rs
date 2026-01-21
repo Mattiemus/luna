@@ -1,8 +1,9 @@
 use crate::Symbol;
 use crate::matching::MatchRule;
 use crate::matching::rule_dc::RuleDC;
-use crate::matching::rule_df::RuleDF;
+use crate::matching::rule_dnc::RuleDNC;
 use crate::matching::rule_fve::RuleFVE;
+use crate::matching::rule_sve::RuleSVEA;
 use crate::matching::rule_svec::RuleSVEC;
 use crate::matching::rule_svef::RuleSVEF;
 use crate::matching::rule_t::RuleT;
@@ -46,14 +47,11 @@ pub struct Matcher<'c> {
 }
 
 impl<'c> Matcher<'c> {
-    pub fn new(pattern: impl Into<Expr>, subject: impl Into<Expr>, context: &'c Context) -> Self {
+    pub fn new(pattern: Expr, ground: Expr, context: &'c Context) -> Self {
         Self {
             context,
             match_stack: Vec::new(),
-            equation_stack: vec![MatchEquation {
-                pattern: pattern.into(),
-                ground: subject.into(),
-            }],
+            equation_stack: vec![MatchEquation { pattern, ground }],
             substitutions: HashMap::new(),
         }
     }
@@ -61,8 +59,7 @@ impl<'c> Matcher<'c> {
     /// Check which rule applies to the active match equation, creates the match generator for that
     /// rule, and pushes the match generator onto the match stack.
     fn select_rule(&mut self) -> Option<BoxedMatchGenerator> {
-        // TODO: Substitute bound variables with their values. This probably should NOT happen here
-        //  though as we would otherwise be rebuilding `match_equation` on every evaluation step.
+        // TODO: Substitute bound variables with their values for the *pattern*.
         let match_equation = match self.equation_stack.pop() {
             Some(match_equation) => match_equation,
             None => return None,
@@ -105,7 +102,7 @@ impl<'c> Matcher<'c> {
                 ) {
                     // Rules for Free Functions (neither associative nor commutative).
                     (false, false) => {
-                        if let Some(rule) = RuleDF::try_rule(&match_equation) {
+                        if let Some(rule) = RuleDNC::try_rule(&match_equation) {
                             return Some(Box::new(rule));
                         }
 
@@ -133,21 +130,16 @@ impl<'c> Matcher<'c> {
 
                     // Rules for associative functions.
                     (false, true) => {
-                        // if let Some(rule) = RuleSVEA::try_rule(&match_equation) {
-                        //     return Some(Box::new(rule));
-                        // }
-                        //
+                        if let Some(rule) = RuleSVEA::try_rule(&match_equation) {
+                            return Some(Box::new(rule));
+                        }
+
                         // if let Some(rule) = RuleFVEA::try_rule(&match_equation) {
-                        //     return Some(Box::new(rule));
-                        // }
-                        //
                         // if let Some(rule) = RuleIVEA::try_rule(&match_equation) {
-                        //     return Some(Box::new(rule));
-                        // }
-                        //
-                        // if let Some(rule) = RuleDecA::try_rule(&match_equation) {
-                        //     return Some(Box::new(rule));
-                        // }
+
+                        if let Some(rule) = RuleDNC::try_rule(&match_equation) {
+                            return Some(Box::new(rule));
+                        }
 
                         self.equation_stack.push(match_equation);
                         None
@@ -156,20 +148,12 @@ impl<'c> Matcher<'c> {
                     // Rules for associative-commutative symbols.
                     (true, true) => {
                         // if let Some(rule) = RuleSVEAC::try_rule(&match_equation) {
-                        //     return Some(Box::new(rule));
-                        // }
-                        //
                         // if let Some(rule) = RuleFVEAC::try_rule(&match_equation) {
-                        //     return Some(Box::new(rule));
-                        // }
-                        //
                         // if let Some(rule) = RuleIVEAC::try_rule(&match_equation) {
-                        //     return Some(Box::new(rule));
-                        // }
-                        //
-                        // if let Some(rule) = RuleDecAC::try_rule(&match_equation) {
-                        //     return Some(Box::new(rule));
-                        // }
+
+                        if let Some(rule) = RuleDC::try_rule(&match_equation) {
+                            return Some(Box::new(rule));
+                        }
 
                         self.equation_stack.push(match_equation);
                         None
@@ -220,8 +204,11 @@ impl<'c> Matcher<'c> {
 
         for result in results.drain(..) {
             match result {
-                MatchResult::Substitution(substitution) => {
-                    self.push_substitution(substitution);
+                MatchResult::Substitution(Substitution { variable, ground }) => {
+                    self.substitutions.insert(variable.clone(), ground.clone());
+
+                    self.match_stack
+                        .push(MatchStack::Substitution(variable.clone()));
                 }
 
                 MatchResult::MatchEquation(match_equation) => {
@@ -232,24 +219,9 @@ impl<'c> Matcher<'c> {
         }
 
         if equation_count > 0 {
-            self.push_match_equations(equation_count);
+            self.match_stack
+                .push(MatchStack::ProducedMatchEquations(equation_count));
         }
-    }
-
-    fn push_rule(&mut self, generator: BoxedMatchGenerator) {
-        self.match_stack.push(MatchStack::MatchGenerator(generator));
-    }
-
-    fn push_substitution(&mut self, Substitution { variable, ground }: Substitution) {
-        self.substitutions.insert(variable.clone(), ground.clone());
-
-        self.match_stack
-            .push(MatchStack::Substitution(variable.clone()));
-    }
-
-    fn push_match_equations(&mut self, equation_count: usize) {
-        self.match_stack
-            .push(MatchStack::ProducedMatchEquations(equation_count));
     }
 }
 
@@ -270,7 +242,8 @@ impl<'c> Iterator for Matcher<'c> {
                 Some(match_generator) => {
                     // Push the `MatchGenerator` onto the match stack.
                     // It is now the active `MatchGenerator`.
-                    self.push_rule(match_generator);
+                    self.match_stack
+                        .push(MatchStack::MatchGenerator(match_generator));
                 }
 
                 // No rule applies.
@@ -285,7 +258,8 @@ impl<'c> Iterator for Matcher<'c> {
                     let match_generator = self.undo();
 
                     // But retain the active match generator.
-                    self.push_rule(match_generator);
+                    self.match_stack
+                        .push(MatchStack::MatchGenerator(match_generator));
                 }
             }
 
@@ -321,7 +295,8 @@ impl<'c> Iterator for Matcher<'c> {
                                 }
 
                                 let match_generator = self.undo();
-                                self.push_rule(match_generator);
+                                self.match_stack
+                                    .push(MatchStack::MatchGenerator(match_generator));
 
                                 continue 'step2;
                             }
@@ -391,6 +366,20 @@ mod tests {
                     .set_attributes(
                         &Symbol::new("fc"),
                         crate::Attributes::from(crate::Attribute::Commutative),
+                    )
+                    .unwrap();
+
+                context
+                    .set_attributes(
+                        &Symbol::new("fa"),
+                        crate::Attributes::from(crate::Attribute::Associative),
+                    )
+                    .unwrap();
+
+                context
+                    .set_attributes(
+                        &Symbol::new("fac"),
+                        crate::Attribute::Associative + crate::Attribute::Commutative,
                     )
                     .unwrap();
 
@@ -504,7 +493,9 @@ mod tests {
     matcher_test!(named_blank_null_sequence_matches_sequence_length_2, "xs___", "Sequence[a, b]", [{ "xs" => "Sequence[a, b]" }]);
     matcher_test!(named_blank_null_sequence_matches_sequence_length_3, "xs___", "Sequence[a, b, c]", [{ "xs" => "Sequence[a, b, c]" }]);
 
-    // TODO: Tests for FVE `f_[a, b, c]` and `f[a, b, c]`.
+    // Blanks in head
+    matcher_test!(unnamed_blank_in_head, "_[a, b, c]", "abc[a, b, c]", [{}]);
+    matcher_test!(named_blank_in_head, "x_[a, b, c]", "abc[a, b, c]", [{ "x" => "abc" }]);
 
     mod free_functions {
         use super::*;
@@ -576,129 +567,212 @@ mod tests {
 
     mod commutative {
         use super::*;
-        use crate::{Attribute, Attributes};
-        use test_case::test_case;
 
-        fn create_context() -> Context {
-            let mut context = Context::new();
+        // Unmatchable cases
+        matcher_test!(mismatched_heads, "fc[a, b, c]", "g[a, b, c]", []);
+        matcher_test!(unmatchable_param, "fc[a, b]", "fc[a, c]", []);
+        matcher_test!(extra_param, "fc[a, b]", "fc[a, b, c]", []);
+        matcher_test!(blank_seq_empty, "fc[__]", "fc[]", []);
 
-            context
-                .set_attributes(&Symbol::new("f"), Attributes::from(Attribute::Commutative))
-                .unwrap();
+        // Exact and order-independent matches
+        matcher_test!(blank_null_seq_empty, "fc[___]", "fc[]", [{}]);
+        matcher_test!(exact_match, "fc[a, b, c]", "fc[a, b, c]", [{}]);
+        matcher_test!(order_independent_match, "fc[a, b, c]", "fc[c, b, a]", [{}]);
+        matcher_test!(blank_order_independent, "fc[a, _, c]", "fc[c, _, a]", [{}]);
 
-            context
-        }
+        // Single named blank variable
+        matcher_test!(named_blank_first, "fc[x_, b, c]", "fc[a, b, c]", [{ "x" => "a" }]);
+        matcher_test!(named_blank_second, "fc[a, x_, c]", "fc[a, b, c]", [{ "x" => "b" }]);
+        matcher_test!(named_blank_third, "fc[a, b, x_]", "fc[a, b, c]", [{ "x" => "c" }]);
 
-        #[test_case("f[a, b, c]", "g[a, b, c]" ; "mismatched expression heads")]
-        #[test_case("f[a, b]", "f[a, c]" ; "unmatchable parameter")]
-        #[test_case("f[a, b]", "f[a, b, c]" ; "extra parameter")]
-        #[test_case("f[__]", "f[]" ; "cannot match __ to empty sequence")]
-        fn unmatchable_expressions_gives_no_solutions(pattern: &str, ground: &str) {
-            let context = Context::new();
+        // Two named blank variables
+        matcher_test!(
+            two_named_blanks_1,
+            "fc[x_, y_, c]",
+            "fc[a, b, c]",
+            [
+                { "x" => "a", "y" => "b" },
+                { "x" => "b", "y" => "a" }
+            ]
+        );
 
-            let mut matcher =
-                Matcher::new(parse(pattern).unwrap(), parse(ground).unwrap(), &context);
+        matcher_test!(
+            two_named_blanks_2,
+            "fc[x_, b, y_]",
+            "fc[a, b, c]",
+            [
+                { "x" => "a", "y" => "c" },
+                { "x" => "c", "y" => "a" }
+            ]
+        );
 
-            assert_matches!(matcher, []);
-        }
+        matcher_test!(
+            two_named_blanks_3,
+            "fc[a, x_, y_]",
+            "fc[a, b, c]",
+            [
+                { "x" => "b", "y" => "c" },
+                { "x" => "c", "y" => "b" }
+            ]
+        );
 
-        #[test_case("f[a, b, c]", "f[a, b, c]" ; "exact match")]
-        #[test_case("f[a, b, c]", "f[c, b, a]" ; "matches regardless of argument order")]
-        #[test_case("f[a, _, c]", "f[c, _, a]" ; "matches blank regardless of argument order")]
-        fn handles_matches_with_single_empty_solution(pattern: &str, ground: &str) {
-            let context = create_context();
-
-            let mut matcher =
-                Matcher::new(parse(pattern).unwrap(), parse(ground).unwrap(), &context);
-
-            assert_matches!(matcher, [{}]);
-        }
-
-        #[test_case("f[x_, b, c]", "f[a, b, c]", "a" ; "in first element")]
-        #[test_case("f[a, x_, c]", "f[a, b, c]", "b" ; "in second element")]
-        #[test_case("f[a, b, x_]", "f[a, b, c]", "c" ; "in third element")]
-        fn handles_single_blank_named_variable(pattern: &str, ground: &str, x: &str) {
-            let context = create_context();
-
-            let mut matcher =
-                Matcher::new(parse(pattern).unwrap(), parse(ground).unwrap(), &context);
-
-            assert_matches!(matcher, [{"x" => x}]);
-        }
-
-        #[test_case("f[x_, y_, c]", "f[a, b, c]", "a", "b" ; "in first and second elements")]
-        #[test_case("f[x_, b, y_]", "f[a, b, c]", "a", "c" ; "in first and third elements")]
-        #[test_case("f[a, y_, x_]", "f[a, b, c]", "c", "b" ; "in second and third elements")]
-        fn handles_two_blank_named_variables(pattern: &str, ground: &str, x: &str, y: &str) {
-            let context = create_context();
-
-            let mut matcher =
-                Matcher::new(parse(pattern).unwrap(), parse(ground).unwrap(), &context);
-
-            assert_matches!(matcher, [
-                {"x" => x, "y" => y},
-                {"x" => y, "y" => x},
-            ]);
-        }
-
-        #[test]
-        fn handles_multiple_blank_sequence_variables() {
-            let context = create_context();
-
-            let mut matcher = Matcher::new(
-                parse("f[xs__, ys__]").unwrap(),
-                parse("f[a, b, c]").unwrap(),
-                &context,
-            );
-
-            assert_matches!(matcher, [
+        // Multiple blank sequence variables
+        matcher_test!(
+            multiple_blank_sequences,
+            "fc[xs__, ys__]",
+            "fc[a, b, c]",
+            [
                 {"xs" => "Sequence[a]", "ys" => "Sequence[b, c]"},
                 {"xs" => "Sequence[a]", "ys" => "Sequence[c, b]"},
                 {"xs" => "Sequence[b]", "ys" => "Sequence[a, c]"},
                 {"xs" => "Sequence[b]", "ys" => "Sequence[c, a]"},
-                {"xs" => "Sequence[a, b]", "ys" => "Sequence[c]"},
-                {"xs" => "Sequence[b, a]", "ys" => "Sequence[c]"},
                 {"xs" => "Sequence[c]", "ys" => "Sequence[a, b]"},
                 {"xs" => "Sequence[c]", "ys" => "Sequence[b, a]"},
+                {"xs" => "Sequence[a, b]", "ys" => "Sequence[c]"},
+                {"xs" => "Sequence[b, a]", "ys" => "Sequence[c]"},
+                {"xs" => "Sequence[a, c]", "ys" => "Sequence[b]"},
+                {"xs" => "Sequence[c, a]", "ys" => "Sequence[b]"},
+                {"xs" => "Sequence[b, c]", "ys" => "Sequence[a]"},
+                {"xs" => "Sequence[c, b]", "ys" => "Sequence[a]"}
+            ]
+        );
+
+        // Multiple blank null sequence variables
+        matcher_test!(
+            multiple_blank_null_sequences,
+            "fc[xs___, ys___]",
+            "fc[a, b, c]",
+            [
+                {"xs" => "Sequence[]", "ys" => "Sequence[a, b, c]"},
+                {"xs" => "Sequence[]", "ys" => "Sequence[a, c, b]"},
+                {"xs" => "Sequence[]", "ys" => "Sequence[b, a, c]"},
+                {"xs" => "Sequence[]", "ys" => "Sequence[b, c, a]"},
+                {"xs" => "Sequence[]", "ys" => "Sequence[c, a, b]"},
+                {"xs" => "Sequence[]", "ys" => "Sequence[c, b, a]"},
+                {"xs" => "Sequence[a]", "ys" => "Sequence[b, c]"},
+                {"xs" => "Sequence[a]", "ys" => "Sequence[c, b]"},
+                {"xs" => "Sequence[b]", "ys" => "Sequence[a, c]"},
+                {"xs" => "Sequence[b]", "ys" => "Sequence[c, a]"},
+                {"xs" => "Sequence[c]", "ys" => "Sequence[a, b]"},
+                {"xs" => "Sequence[c]", "ys" => "Sequence[b, a]"},
+                {"xs" => "Sequence[a, b]", "ys" => "Sequence[c]"},
+                {"xs" => "Sequence[b, a]", "ys" => "Sequence[c]"},
                 {"xs" => "Sequence[a, c]", "ys" => "Sequence[b]"},
                 {"xs" => "Sequence[c, a]", "ys" => "Sequence[b]"},
                 {"xs" => "Sequence[b, c]", "ys" => "Sequence[a]"},
                 {"xs" => "Sequence[c, b]", "ys" => "Sequence[a]"},
-            ]);
-        }
+                {"xs" => "Sequence[a, b, c]", "ys" => "Sequence[]"},
+                {"xs" => "Sequence[a, c, b]", "ys" => "Sequence[]"},
+                {"xs" => "Sequence[b, a, c]", "ys" => "Sequence[]"},
+                {"xs" => "Sequence[b, c, a]", "ys" => "Sequence[]"},
+                {"xs" => "Sequence[c, a, b]", "ys" => "Sequence[]"},
+                {"xs" => "Sequence[c, b, a]", "ys" => "Sequence[]"},
+            ]
+        );
+    }
 
-        // #[test]
-        // fn handles_multiple_blank_null_sequence_variables() {
-        //     let context = create_context();
-        //
-        //     let mut matcher = Matcher::new(
-        //         parse("f[xs___, ys___]").unwrap(),
-        //         parse("f[a, b]").unwrap(),
-        //         &context,
-        //     );
-        //
-        //     assert_eq!(
-        //         matcher.next(),
-        //         Some(HashMap::from([
-        //             (Symbol::new("xs"), parse("Sequence[]").unwrap()),
-        //             (Symbol::new("ys"), parse("Sequence[a, b]").unwrap())
-        //         ]))
-        //     );
-        //     assert_eq!(
-        //         matcher.next(),
-        //         Some(HashMap::from([
-        //             (Symbol::new("xs"), parse("Sequence[a]").unwrap()),
-        //             (Symbol::new("ys"), parse("Sequence[b]").unwrap())
-        //         ]))
-        //     );
-        //     assert_eq!(
-        //         matcher.next(),
-        //         Some(HashMap::from([
-        //             (Symbol::new("xs"), parse("Sequence[a, b]").unwrap()),
-        //             (Symbol::new("ys"), parse("Sequence[]").unwrap())
-        //         ]))
-        //     );
-        //     assert_eq!(matcher.next(), None);
-        // }
+    mod associative {
+        use super::*;
+
+        // Unmatchable cases
+        matcher_test!(mismatched_heads, "fa[a, b, c]", "g[a, b, c]", []);
+        matcher_test!(extra_param, "fa[a, b]", "fa[a, b, c]", []);
+        matcher_test!(blank_seq_empty, "fa[__]", "fa[]", []);
+
+        // Exact and application-independent matches
+        matcher_test!(blank_null_seq_empty, "fa[___]", "fa[]", [{}]);
+        matcher_test!(exact_match, "fa[a, b, c]", "fa[a, b, c]", [{}]);
+        // TODO: matcher_test!(application_independent_match_1, "fa[fa[a, b], c]", "fa[a, b, c]", [{}]);
+        // TODO: matcher_test!(application_independent_match_2, "fa[a, fa[b, c]]", "fa[a, b, c]", [{}]);
+
+        // Multiple blank sequence variables
+        matcher_test!(
+            multiple_blank_sequences,
+            "fa[xs__, ys__]",
+            "fa[a, b, c]",
+            [
+                {"xs" => "Sequence[a]", "ys" => "Sequence[b, c]"},
+                {"xs" => "Sequence[a]", "ys" => "Sequence[fa[b], c]"},
+                {"xs" => "Sequence[a]", "ys" => "Sequence[b, fa[c]]"},
+                {"xs" => "Sequence[a]", "ys" => "Sequence[fa[b], fa[c]]"},
+                {"xs" => "Sequence[a]", "ys" => "Sequence[fa[b, c]]"},
+                {"xs" => "Sequence[fa[a]]", "ys" => "Sequence[b, c]"},
+                {"xs" => "Sequence[fa[a]]", "ys" => "Sequence[fa[b], c]"},
+                {"xs" => "Sequence[fa[a]]", "ys" => "Sequence[b, fa[c]]"},
+                {"xs" => "Sequence[fa[a]]", "ys" => "Sequence[fa[b], fa[c]]"},
+                {"xs" => "Sequence[fa[a]]", "ys" => "Sequence[fa[b, c]]"},
+                {"xs" => "Sequence[a, b]", "ys" => "Sequence[c]"},
+                {"xs" => "Sequence[a, b]", "ys" => "Sequence[fa[c]]"},
+                {"xs" => "Sequence[fa[a], b]", "ys" => "Sequence[c]"},
+                {"xs" => "Sequence[fa[a], b]", "ys" => "Sequence[fa[c]]"},
+                {"xs" => "Sequence[a, fa[b]]", "ys" => "Sequence[c]"},
+                {"xs" => "Sequence[a, fa[b]]", "ys" => "Sequence[fa[c]]"},
+                {"xs" => "Sequence[fa[a], fa[b]]", "ys" => "Sequence[c]"},
+                {"xs" => "Sequence[fa[a], fa[b]]", "ys" => "Sequence[fa[c]]"},
+                {"xs" => "Sequence[fa[a, b]]", "ys" => "Sequence[c]"},
+                {"xs" => "Sequence[fa[a, b]]", "ys" => "Sequence[fa[c]]"},
+            ]
+        );
+
+        // Multiple blank null sequence variables
+        matcher_test!(
+            multiple_blank_null_sequences,
+            "fa[xs___, ys___]",
+            "fa[a, b, c]",
+            [
+                {"xs" => "Sequence[]", "ys" => "Sequence[a, b, c]"},
+                {"xs" => "Sequence[]", "ys" => "Sequence[fa[a], b, c]"},
+                {"xs" => "Sequence[]", "ys" => "Sequence[a, fa[b], c]"},
+                {"xs" => "Sequence[]", "ys" => "Sequence[a, b, fa[c]]"},
+                {"xs" => "Sequence[]", "ys" => "Sequence[fa[a], fa[b], c]"},
+                {"xs" => "Sequence[]", "ys" => "Sequence[fa[a], b, fa[c]]"},
+                {"xs" => "Sequence[]", "ys" => "Sequence[a, fa[b], fa[c]]"},
+                {"xs" => "Sequence[]", "ys" => "Sequence[fa[a], fa[b], fa[c]]"},
+                {"xs" => "Sequence[]", "ys" => "Sequence[fa[a, b], c]"},
+                {"xs" => "Sequence[]", "ys" => "Sequence[fa[a, b], fa[c]]"},
+                {"xs" => "Sequence[]", "ys" => "Sequence[a, fa[b, c]]"},
+                {"xs" => "Sequence[]", "ys" => "Sequence[fa[a], fa[b, c]]"},
+                {"xs" => "Sequence[]", "ys" => "Sequence[fa[a, b, c]]"},
+                {"xs" => "Sequence[a]", "ys" => "Sequence[b, c]"},
+                {"xs" => "Sequence[a]", "ys" => "Sequence[fa[b], c]"},
+                {"xs" => "Sequence[a]", "ys" => "Sequence[b, fa[c]]"},
+                {"xs" => "Sequence[a]", "ys" => "Sequence[fa[b], fa[c]]"},
+                {"xs" => "Sequence[a]", "ys" => "Sequence[fa[b, c]]"},
+                {"xs" => "Sequence[fa[a]]", "ys" => "Sequence[b, c]"},
+                {"xs" => "Sequence[fa[a]]", "ys" => "Sequence[fa[b], c]"},
+                {"xs" => "Sequence[fa[a]]", "ys" => "Sequence[b, fa[c]]"},
+                {"xs" => "Sequence[fa[a]]", "ys" => "Sequence[fa[b], fa[c]]"},
+                {"xs" => "Sequence[fa[a]]", "ys" => "Sequence[fa[b, c]]"},
+                {"xs" => "Sequence[a, b]", "ys" => "Sequence[c]"},
+                {"xs" => "Sequence[a, b]", "ys" => "Sequence[fa[c]]"},
+                {"xs" => "Sequence[fa[a], b]", "ys" => "Sequence[c]"},
+                {"xs" => "Sequence[fa[a], b]", "ys" => "Sequence[fa[c]]"},
+                {"xs" => "Sequence[a, fa[b]]", "ys" => "Sequence[c]"},
+                {"xs" => "Sequence[a, fa[b]]", "ys" => "Sequence[fa[c]]"},
+                {"xs" => "Sequence[fa[a], fa[b]]", "ys" => "Sequence[c]"},
+                {"xs" => "Sequence[fa[a], fa[b]]", "ys" => "Sequence[fa[c]]"},
+                {"xs" => "Sequence[fa[a, b]]", "ys" => "Sequence[c]"},
+                {"xs" => "Sequence[fa[a, b]]", "ys" => "Sequence[fa[c]]"},
+                {"xs" => "Sequence[a, b, c]", "ys" => "Sequence[]"},
+                {"xs" => "Sequence[fa[a], b, c]", "ys" => "Sequence[]"},
+                {"xs" => "Sequence[a, fa[b], c]", "ys" => "Sequence[]"},
+                {"xs" => "Sequence[a, b, fa[c]]", "ys" => "Sequence[]"},
+                {"xs" => "Sequence[fa[a], fa[b], c]", "ys" => "Sequence[]"},
+                {"xs" => "Sequence[fa[a], b, fa[c]]", "ys" => "Sequence[]"},
+                {"xs" => "Sequence[a, fa[b], fa[c]]", "ys" => "Sequence[]"},
+                {"xs" => "Sequence[fa[a], fa[b], fa[c]]", "ys" => "Sequence[]"},
+                {"xs" => "Sequence[fa[a, b], c]", "ys" => "Sequence[]"},
+                {"xs" => "Sequence[fa[a, b], fa[c]]", "ys" => "Sequence[]"},
+                {"xs" => "Sequence[a, fa[b, c]]", "ys" => "Sequence[]"},
+                {"xs" => "Sequence[fa[a], fa[b, c]]", "ys" => "Sequence[]"},
+                {"xs" => "Sequence[fa[a, b, c]]", "ys" => "Sequence[]"},
+            ]
+        );
+    }
+
+    mod associative_commutative {
+        use super::*;
+
+        // TODO
     }
 }

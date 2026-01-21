@@ -27,6 +27,10 @@ impl Normal {
         &self.elements
     }
 
+    pub fn element(&self, idx: usize) -> &Expr {
+        &self.elements[idx]
+    }
+
     pub fn len(&self) -> usize {
         self.elements.len()
     }

@@ -1,17 +1,21 @@
+mod function_application;
 mod matcher;
 mod permute;
 mod rule_dc;
-mod rule_df;
+mod rule_dnc;
 mod rule_fve;
+mod rule_sve;
 mod rule_svec;
 mod rule_svef;
 mod rule_t;
 mod rule_ve;
 
+use std::collections::HashMap;
+
 use crate::Expr;
 use crate::Symbol;
+
 pub use matcher::Matcher;
-use std::collections::HashMap;
 
 pub type SolutionSet = HashMap<Symbol, Expr>;
 

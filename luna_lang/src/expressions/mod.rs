@@ -58,26 +58,6 @@ impl Expr {
         }
     }
 
-    pub fn is_string(&self) -> bool {
-        matches!(*self.0, ExprKind::String(_))
-    }
-
-    pub fn is_integer(&self) -> bool {
-        matches!(*self.0, ExprKind::Integer(_))
-    }
-
-    pub fn is_real(&self) -> bool {
-        matches!(*self.0, ExprKind::Real(_))
-    }
-
-    pub fn is_symbol(&self) -> bool {
-        matches!(*self.0, ExprKind::Symbol(_))
-    }
-
-    pub fn is_normal(&self) -> bool {
-        matches!(*self.0, ExprKind::Normal(_))
-    }
-
     pub fn is_normal_head(&self, head: &Symbol) -> bool {
         match *self.0 {
             ExprKind::Normal(ref v) => v.has_head(head),

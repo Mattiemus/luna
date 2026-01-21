@@ -3,21 +3,21 @@ use crate::{
     is_any_sequence_variable,
 };
 
-/// Decomposition under a free head.
+/// Decomposition under a non-commutative head.
 ///
 /// Matches a pattern `f[x, ...]` against a value `g[y, ...]` where `f` is a free function.
 /// The value of `x` must not be a sequence variable.
 ///
 /// Assumptions:
-/// - `f` is a free function.
+/// - `f` is a non-commutative function.
 /// - `f` and `g` are equal.
-pub(crate) struct RuleDF {
+pub(crate) struct RuleDNC {
     pattern: Normal,
     ground: Normal,
     exhausted: bool,
 }
 
-impl MatchRule for RuleDF {
+impl MatchRule for RuleDNC {
     fn try_rule(match_equation: &MatchEquation) -> Option<Self> {
         if let (Some(p), Some(g)) = (
             match_equation.pattern.try_normal(),
@@ -40,7 +40,7 @@ impl MatchRule for RuleDF {
     }
 }
 
-impl MatchGenerator for RuleDF {
+impl MatchGenerator for RuleDNC {
     fn match_equation(&self) -> MatchEquation {
         MatchEquation {
             pattern: Expr::from(self.pattern.clone()),
@@ -49,7 +49,7 @@ impl MatchGenerator for RuleDF {
     }
 }
 
-impl Iterator for RuleDF {
+impl Iterator for RuleDNC {
     type Item = MatchResultList;
 
     fn next(&mut self) -> Option<Self::Item> {
