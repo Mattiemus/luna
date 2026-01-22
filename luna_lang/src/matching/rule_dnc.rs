@@ -57,8 +57,6 @@ impl Iterator for RuleDNC {
             return None;
         }
 
-        self.exhausted = true;
-
         // Match equation to attempt to match `x` and `y`.
         let result_variable_equation = MatchResult::MatchEquation(MatchEquation {
             pattern: self.pattern.elements()[0].clone(),
@@ -78,6 +76,7 @@ impl Iterator for RuleDNC {
             )),
         });
 
+        self.exhausted = true;
         Some(vec![result_variable_equation, result_function_equation])
     }
 }

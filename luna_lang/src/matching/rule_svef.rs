@@ -25,6 +25,7 @@ pub(crate) struct RuleSVEF {
 
 impl RuleSVEF {
     fn make_next(&self) -> MatchResultList {
+        // Attempt to continue to match `f[...]` against `g[...]`.
         let new_match_equation = MatchResult::MatchEquation(MatchEquation {
             pattern: Expr::from(Normal::new(
                 self.pattern.head().clone(),
@@ -36,6 +37,7 @@ impl RuleSVEF {
             )),
         });
 
+        // Create the substitution so long as the pattern was named.
         if let Some(variable) = &self.variable {
             let substitution = MatchResult::Substitution(Substitution {
                 variable: variable.clone(),
@@ -97,11 +99,8 @@ impl Iterator for RuleSVEF {
         }
 
         // Take the next term from the ground function.
-        if let Some(next_part) = self.ground.part(self.ground_sequence.len()) {
-            self.ground_sequence.push(next_part.clone());
-        } else {
-            return None;
-        }
+        let next_element = self.ground.part(self.ground_sequence.len())?;
+        self.ground_sequence.push(next_element.clone());
 
         // Construct the result.
         Some(self.make_next())

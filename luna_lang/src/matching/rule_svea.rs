@@ -27,6 +27,7 @@ pub(crate) struct RuleSVEA {
 
 impl RuleSVEA {
     fn make_next(&self, ordered_sequence: Vec<Expr>) -> MatchResultList {
+        // Attempt to continue to match `f[...]` against `g[...]`.
         let result_equation = MatchResult::MatchEquation(MatchEquation {
             pattern: Expr::from(Normal::new(
                 self.pattern.head().clone(),
@@ -38,6 +39,7 @@ impl RuleSVEA {
             )),
         });
 
+        // Create the substitution so long as the pattern was named.
         if let Some(variable) = &self.variable {
             let result_substitution = MatchResult::Substitution(Substitution {
                 variable: variable.clone(),
@@ -107,25 +109,25 @@ impl Iterator for RuleSVEA {
                 Some(self.make_next(Vec::new()))
             }
 
-            // Otherwise generate the next result
+            // Otherwise generate the next result.
             Some(afa_generator) => {
-                // Determine the next sequence
+                // Determine the next sequence.
                 let ordered_sequence = match afa_generator.next() {
                     // There is no next valid result from the AFA generator.
                     // Copy the next element from the `ground` expression into the active ground
                     // sequence, and use that as the basis for a new AFA generator.
                     None => {
-                        if let Some(next_element) = self.ground.part(self.ground_sequence.len()) {
-                            self.ground_sequence.push(next_element.clone());
-                        } else {
-                            return None;
-                        }
+                        // Attempt to extend the ground sequence
+                        let next_element = self.ground.part(self.ground_sequence.len())?;
+                        self.ground_sequence.push(next_element.clone());
 
+                        // Use the ground sequence to build a new AFA generator.
                         let mut new_afa_generator = AFAGenerator::new(Normal::new(
                             self.ground.head().clone(),
                             self.ground_sequence.clone(),
                         ));
 
+                        // Get the next result to be returned and store the new AFA generator.
                         let next_result = new_afa_generator.next().unwrap();
                         self.afa_generator = Some(Box::new(new_afa_generator));
 

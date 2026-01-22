@@ -1,7 +1,6 @@
 mod function_application;
 mod matcher;
 mod permutations;
-mod subsets;
 mod rule_dc;
 mod rule_dnc;
 mod rule_fve;
@@ -11,6 +10,7 @@ mod rule_svec;
 mod rule_svef;
 mod rule_t;
 mod rule_ve;
+mod subsets;
 
 use std::collections::HashMap;
 

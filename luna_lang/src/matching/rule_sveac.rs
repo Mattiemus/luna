@@ -1,9 +1,9 @@
 use crate::matching::function_application::{AFACGenerator, FunctionApplicationGenerator};
+use crate::matching::subsets::Subset;
 use crate::{
     Expr, MatchEquation, MatchGenerator, MatchResult, MatchResultList, MatchRule, Normal,
     Substitution, Symbol, parse_any_sequence_variable,
 };
-use crate::matching::subsets::next_subset;
 
 /// Sequence variable elimination under an associative-commutative head.
 ///
@@ -18,9 +18,8 @@ pub(crate) struct RuleSVEAC {
     ground: Normal,
     variable: Option<Symbol>,
 
-    /// Bit positions indicate which subset of the ground's arguments are currently being matched
-    /// against.
-    subset: u32,
+    /// Current subset of the grounds arguments which are being matched against.
+    subset: Subset,
 
     /// List of values that are not part of the current subset.
     complement: Vec<Expr>,
@@ -32,6 +31,7 @@ pub(crate) struct RuleSVEAC {
 
 impl RuleSVEAC {
     fn make_next(&self, ordered_sequence: Vec<Expr>) -> MatchResultList {
+        // Attempt to continue to match `f[...]` against `g[...]`.
         let result_equation = MatchResult::MatchEquation(MatchEquation {
             pattern: Expr::from(Normal::new(
                 self.pattern.head().clone(),
@@ -43,6 +43,7 @@ impl RuleSVEAC {
             )),
         });
 
+        // Create the substitution so long as the pattern was named.
         if let Some(variable) = &self.variable {
             let result_substitution = MatchResult::Substitution(Substitution {
                 variable: variable.clone(),
@@ -70,7 +71,7 @@ impl MatchRule for RuleSVEAC {
                         pattern: p.clone(),
                         ground: g.clone(),
                         variable: variable.cloned(),
-                        subset: 0,
+                        subset: Subset::empty(g.len()),
                         complement: Vec::with_capacity(g.len()),
                         afa_generator: if matches_empty {
                             None
@@ -103,9 +104,9 @@ impl Iterator for RuleSVEAC {
 
     fn next(&mut self) -> Option<Self::Item> {
         match &mut self.afa_generator {
+            // Current generator being `None` is the signal we need to produce an empty sequence.
             None => {
-                self.complement.clear();
-                self.complement.extend_from_slice(self.ground.elements());
+                self.complement = self.ground.elements().to_vec();
 
                 self.afa_generator = Some(Box::new(AFACGenerator::new(Normal::new(
                     self.ground.head().clone(),
@@ -115,40 +116,39 @@ impl Iterator for RuleSVEAC {
                 Some(self.make_next(Vec::new()))
             }
 
+            // Otherwise generate the next result.
             Some(afa_generator) => {
+                // Determine the next sequence.
                 let ordered_sequence = match afa_generator.next() {
+                    // There is no next valid result from the AFA generator.
+                    // Determine the next subset of elements from `g` to use and construct a new afa
+                    // generator.
                     None => {
-                        if let Some(next_subset) =
-                            next_subset(self.ground.len() as u32, self.subset)
-                        {
-                            self.subset = next_subset;
+                        // Determine the next subset.
+                        self.subset = self.subset.next()?;
 
-                            let mut subset = Vec::with_capacity(self.subset.count_ones() as usize);
-                            self.complement.clear();
+                        // Extract the subset and complement from the current subset
+                        let (subset, complement) = self.subset.extract(self.ground.elements());
 
-                            for (k, c) in self.ground.elements().iter().enumerate() {
-                                if ((1 << k) as u32 & self.subset) != 0 {
-                                    subset.push(c.clone());
-                                } else {
-                                    self.complement.push(c.clone());
-                                }
-                            }
+                        // Store the complement
+                        self.complement = complement;
 
-                            let mut new_afa_generator =
-                                AFACGenerator::new(Normal::new(self.ground.head().clone(), subset));
+                        // Use the subset to build a new AFA generator.
+                        let mut new_afa_generator =
+                            AFACGenerator::new(Normal::new(self.ground.head().clone(), subset));
 
-                            let next_result = new_afa_generator.next().unwrap();
-                            self.afa_generator = Some(Box::new(new_afa_generator));
+                        // Get the next result to be returned and store the new AFA generator.
+                        let next_result = new_afa_generator.next().unwrap();
+                        self.afa_generator = Some(Box::new(new_afa_generator));
 
-                            next_result
-                        } else {
-                            return None;
-                        }
+                        next_result
                     }
 
+                    // Current AFA generator is still producing values.
                     Some(next_result) => next_result,
                 };
 
+                // Transform the sequence into a result.
                 Some(self.make_next(ordered_sequence))
             }
         }

@@ -2,7 +2,7 @@ use crate::matching::function_application::{AFAGenerator, FunctionApplicationGen
 use crate::matching::permutations::PermutationGenerator32;
 use crate::{Expr, Normal};
 
-/// Associative-Commutative Function Application Generator
+/// Associative-Commutative Function Application Generator.
 pub struct AFACGenerator {
     function: Normal,
     afa_generator: AFAGenerator,
@@ -28,14 +28,19 @@ impl Iterator for AFACGenerator {
 
     fn next(&mut self) -> Option<Vec<Expr>> {
         match self.afa_generator.next() {
+            // Generator is empty - determine the next permutation to use.
             None => match self.permutations.next() {
+                // There are no more permutations, and the current generator is empty. We have now
+                // exhausted all possible applications.
                 None => None,
+
+                // Start generating more function applications using a newly ordered set of the
+                // function elements.
                 Some(permutation) => {
                     let permuted_function = Normal::new(
                         self.function.head().clone(),
                         permutation
-                            .map(|n| self.function.element(n))
-                            .cloned()
+                            .map(|n| self.function.element(n).clone())
                             .collect::<Vec<_>>(),
                     );
 
@@ -43,6 +48,8 @@ impl Iterator for AFACGenerator {
                     self.afa_generator.next()
                 }
             },
+
+            // Current generator is continuing to produce results.
             Some(results) => Some(results),
         }
     }

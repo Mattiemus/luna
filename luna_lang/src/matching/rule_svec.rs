@@ -1,9 +1,9 @@
 use crate::matching::permutations::PermutationGenerator32;
+use crate::matching::subsets::Subset;
 use crate::{
     Expr, MatchEquation, MatchGenerator, MatchResult, MatchResultList, MatchRule, Normal,
     Substitution, Symbol, parse_any_sequence_variable,
 };
-use crate::matching::subsets::next_subset;
 
 /// Sequence variable elimination under a commutative head.
 ///
@@ -18,9 +18,11 @@ pub(crate) struct RuleSVEC {
     ground: Normal,
     variable: Option<Symbol>,
 
-    /// Bit positions indicate which subset of the ground's arguments are currently being matched
-    /// against.
-    subset: u32,
+    /// Have we produced the empty sequence as the first result yet?
+    empty_produced: bool,
+
+    /// Current subset of the grounds arguments which are being matched against.
+    subset: Subset,
 
     /// Generator for all permutations of the current subset of elements.
     permutations: PermutationGenerator32,
@@ -40,7 +42,8 @@ impl MatchRule for RuleSVEC {
                         pattern: p.clone(),
                         ground: g.clone(),
                         variable: variable.cloned(),
-                        subset: if matches_empty { 0 } else { 1 },
+                        empty_produced: !matches_empty,
+                        subset: Subset::empty(g.len()),
                         permutations: PermutationGenerator32::new(1),
                     });
                 }
@@ -64,9 +67,12 @@ impl Iterator for RuleSVEC {
     type Item = MatchResultList;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.subset == 0 {
-            self.subset = 1;
+        // If the current subset is empty, and we have not yet produced the empty sequence we should
+        // do that now.
+        if self.subset.is_zero() && !self.empty_produced {
+            self.empty_produced = true;
 
+            // Attempt to continue to match `f[...]` against `g[...]`.
             let match_equation = MatchResult::MatchEquation(MatchEquation {
                 pattern: Expr::from(Normal::new(
                     self.pattern.head().clone(),
@@ -75,6 +81,7 @@ impl Iterator for RuleSVEC {
                 ground: Expr::from(self.ground.clone()),
             });
 
+            // Create the substitution so long as the pattern was named.
             if let Some(variable) = &self.variable {
                 let substitution = MatchResult::Substitution(Substitution {
                     variable: variable.clone(),
@@ -87,34 +94,27 @@ impl Iterator for RuleSVEC {
             return Some(vec![match_equation]);
         }
 
-        if self.subset == 1 && self.ground.is_empty() {
-            return None;
+        // If the current subset is empty we should try and increment it.
+        // It is possible to bail early here if ground is `f[]` (i.e. it is empty).
+        if self.subset.is_zero() {
+            self.subset = self.subset.next()?;
         }
 
+        // Try and get the next permutation for `ground`s elements.
         let permutation = match self.permutations.next() {
             Some(permutation) => permutation,
             None => {
-                if let Some(next_subset) = next_subset(self.ground.len() as u32, self.subset) {
-                    self.subset = next_subset;
-                    self.permutations = PermutationGenerator32::new(self.subset.count_ones() as u8);
-                    self.permutations.next()?
-                } else {
-                    return None;
-                }
+                self.subset = self.subset.next()?;
+                self.permutations = PermutationGenerator32::new(self.subset.count_ones() as u8);
+                self.permutations.next()?
             }
         };
 
-        let mut subset = Vec::with_capacity(self.subset.count_ones() as usize);
-        let mut complement = Vec::with_capacity(self.subset.count_zeros() as usize);
+        // Extract the subset and complement from the current subset
+        let (subset, complement) = self.subset.extract(self.ground.elements());
 
-        for (k, c) in self.ground.elements().iter().enumerate() {
-            if ((1 << k) as u32 & self.subset) != 0 {
-                subset.push(c);
-            } else {
-                complement.push(c.clone());
-            }
-        }
-
+        // Continue matching `f[...]` against the pattern `g[...]` where the contents of `g` is the
+        // complement of the current subset.
         let match_equation = MatchResult::MatchEquation(MatchEquation {
             pattern: Expr::from(Normal::new(
                 self.pattern.head().clone(),
@@ -123,6 +123,8 @@ impl Iterator for RuleSVEC {
             ground: Expr::from(Normal::new(self.ground.head().clone(), complement)),
         });
 
+        // The current subset ordered into the current permutation represents the substitution
+        // for `x`.
         if let Some(variable) = &self.variable {
             let substitution = MatchResult::Substitution(Substitution {
                 variable: variable.clone(),

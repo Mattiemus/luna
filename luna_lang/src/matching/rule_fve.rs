@@ -69,6 +69,7 @@ impl Iterator for RuleFVE {
             ground: Expr::from(self.ground.clone()),
         });
 
+        // Make the substitution of `f_` to `g`, if the pattern was named.
         if let Some(variable) = &self.variable {
             let substitution = MatchResult::Substitution(Substitution {
                 variable: variable.clone(),

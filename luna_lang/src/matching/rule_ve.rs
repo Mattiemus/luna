@@ -67,6 +67,7 @@ impl Iterator for RuleVE {
 
         self.exhausted = true;
 
+        // If the variable `x_` was named, create a substitution for it.
         if let Some(variable) = &self.variable {
             let substitution = MatchResult::Substitution(Substitution {
                 variable: variable.clone(),
