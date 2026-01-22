@@ -28,8 +28,8 @@ impl Iterator for AFACGenerator {
 
     fn next(&mut self) -> Option<Vec<Expr>> {
         match self.afa_generator.next() {
-            Some(results) => Some(results),
             None => match self.permutations.next() {
+                None => None,
                 Some(permutation) => {
                     let permuted_function = Normal::new(
                         self.function.head().clone(),
@@ -42,8 +42,8 @@ impl Iterator for AFACGenerator {
                     self.afa_generator = AFAGenerator::new(permuted_function);
                     self.afa_generator.next()
                 }
-                None => None,
             },
+            Some(results) => Some(results),
         }
     }
 }

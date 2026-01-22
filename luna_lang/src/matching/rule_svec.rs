@@ -102,8 +102,8 @@ impl Iterator for RuleSVEC {
             }
         };
 
-        let mut subset = Vec::with_capacity(self.ground.len());
-        let mut complement = Vec::with_capacity(self.ground.len());
+        let mut subset = Vec::with_capacity(self.subset.count_ones() as usize);
+        let mut complement = Vec::with_capacity(self.subset.count_zeros() as usize);
 
         for (k, c) in self.ground.elements().iter().enumerate() {
             if ((1 << k) as u32 & self.subset) != 0 {

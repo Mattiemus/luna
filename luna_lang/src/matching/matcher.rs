@@ -3,7 +3,8 @@ use crate::matching::MatchRule;
 use crate::matching::rule_dc::RuleDC;
 use crate::matching::rule_dnc::RuleDNC;
 use crate::matching::rule_fve::RuleFVE;
-use crate::matching::rule_sve::{RuleSVEA, RuleSVEAC};
+use crate::matching::rule_svea::RuleSVEA;
+use crate::matching::rule_sveac::RuleSVEAC;
 use crate::matching::rule_svec::RuleSVEC;
 use crate::matching::rule_svef::RuleSVEF;
 use crate::matching::rule_t::RuleT;
@@ -102,11 +103,11 @@ impl<'c> Matcher<'c> {
                 ) {
                     // Rules for Free Functions (neither associative nor commutative).
                     (false, false) => {
-                        if let Some(rule) = RuleDNC::try_rule(&match_equation) {
+                        if let Some(rule) = RuleSVEF::try_rule(&match_equation) {
                             return Some(Box::new(rule));
                         }
 
-                        if let Some(rule) = RuleSVEF::try_rule(&match_equation) {
+                        if let Some(rule) = RuleDNC::try_rule(&match_equation) {
                             return Some(Box::new(rule));
                         }
 
@@ -116,11 +117,11 @@ impl<'c> Matcher<'c> {
 
                     // Rules for commutative functions.
                     (true, false) => {
-                        if let Some(rule) = RuleDC::try_rule(&match_equation) {
+                        if let Some(rule) = RuleSVEC::try_rule(&match_equation) {
                             return Some(Box::new(rule));
                         }
 
-                        if let Some(rule) = RuleSVEC::try_rule(&match_equation) {
+                        if let Some(rule) = RuleDC::try_rule(&match_equation) {
                             return Some(Box::new(rule));
                         }
 
@@ -328,68 +329,82 @@ impl<'c> Iterator for Matcher<'c> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parse;
+    use crate::{parse, Attribute, Attributes};
 
-    macro_rules! assert_matches {
-        // No more solutions expected
-        ($matcher:ident, []) => {
-            assert_eq!($matcher.next(), None);
-        };
+    fn create_context() -> Context {
+        let mut context = Context::new();
 
-        // One or more solutions
-        (
-            $matcher:ident,
-            [
-                { $($name:expr => $value:expr),* $(,)? }
-                $(, { $($rest_name:expr => $rest_value:expr),* })*
-                $(,)?
-            ]
-        ) => {
-            assert_eq!(
-                $matcher.next(),
-                Some(std::collections::HashMap::from([
-                    $( (crate::Symbol::new($name), crate::parse($value).unwrap()) ),*
-                ]))
-            );
+        context
+            .set_attributes(
+                &Symbol::new("fc"),
+                Attributes::from(Attribute::Commutative),
+            )
+            .unwrap();
 
-            assert_matches!(
-                $matcher,
-                [ $( { $($rest_name => $rest_value),* } ),* ]
-            );
-        };
+        context
+            .set_attributes(
+                &Symbol::new("fa"),
+                Attributes::from(Attribute::Associative),
+            )
+            .unwrap();
+
+        context
+            .set_attributes(
+                &Symbol::new("fac"),
+                Attribute::Associative + Attribute::Commutative,
+            )
+            .unwrap();
+
+        context
     }
 
     macro_rules! matcher_test {
-        ($name:ident, $pattern:expr, $ground:expr, $matches:tt) => {
+        ($name:ident, $pattern:expr, $ground:expr, []) => {
             #[test]
             fn $name() -> () {
-                let mut context = Context::new();
-
-                context
-                    .set_attributes(
-                        &Symbol::new("fc"),
-                        crate::Attributes::from(crate::Attribute::Commutative),
-                    )
-                    .unwrap();
-
-                context
-                    .set_attributes(
-                        &Symbol::new("fa"),
-                        crate::Attributes::from(crate::Attribute::Associative),
-                    )
-                    .unwrap();
-
-                context
-                    .set_attributes(
-                        &Symbol::new("fac"),
-                        crate::Attribute::Associative + crate::Attribute::Commutative,
-                    )
-                    .unwrap();
+                let context = create_context();
 
                 let mut matcher =
                     Matcher::new(parse($pattern).unwrap(), parse($ground).unwrap(), &context);
 
-                assert_matches!(matcher, $matches);
+                assert_eq!(matcher.next(), None);
+            }
+        };
+
+        ($name:ident, $pattern:expr, $ground:expr, [[]]) => {
+            #[test]
+            fn $name() -> () {
+                let context = create_context();
+
+                let mut matcher =
+                    Matcher::new(parse($pattern).unwrap(), parse($ground).unwrap(), &context);
+
+                assert_eq!(matcher.next(), Some(HashMap::new()));
+                assert_eq!(matcher.next(), None);
+            }
+        };
+
+        ($name:ident, $pattern:expr, $ground:expr, $matches:tt) => {
+            #[test]
+            fn $name() -> () {
+                let context = create_context();
+
+                let mut matcher =
+                    Matcher::new(parse($pattern).unwrap(), parse($ground).unwrap(), &context);
+
+                for expected_solution in $matches {
+                    let parsed_expected_solution = expected_solution
+                        .iter()
+                        .map(|(symbol, expr)| (crate::Symbol::new(symbol), crate::parse(expr).unwrap()))
+                        .collect::<HashMap<crate::Symbol, crate::Expr>>();
+
+                      assert_eq!(
+                        matcher.next(),
+                        Some(parsed_expected_solution)
+                    );
+                }
+
+                assert_eq!(matcher.next(), None);
             }
         };
     }
@@ -407,98 +422,98 @@ mod tests {
     );
 
     // Solvable with no substitutions
-    matcher_test!(matching_strings, "\"abc\"", "\"abc\"", [{}]);
-    matcher_test!(matching_integers, "123", "123", [{}]);
-    matcher_test!(matching_reals, "2.5", "2.5", [{}]);
-    matcher_test!(matching_symbols, "abc", "abc", [{}]);
+    matcher_test!(matching_strings, "\"abc\"", "\"abc\"", [[]]);
+    matcher_test!(matching_integers, "123", "123", [[]]);
+    matcher_test!(matching_reals, "2.5", "2.5", [[]]);
+    matcher_test!(matching_symbols, "abc", "abc", [[]]);
 
     // Unnamed blank
-    matcher_test!(blank_matches_string, "_", "\"abc\"", [{}]);
-    matcher_test!(blank_matches_integer, "_", "123", [{}]);
-    matcher_test!(blank_matches_real, "_", "2.5", [{}]);
-    matcher_test!(blank_matches_symbol, "_", "abc", [{}]);
-    matcher_test!(blank_matches_expression, "_", "f[a, b, c]", [{}]);
-    matcher_test!(blank_matches_empty_sequence, "_", "Sequence[]", [{}]);
-    matcher_test!(blank_matches_sequence_length_1, "_", "Sequence[a]", [{}]);
-    matcher_test!(blank_matches_sequence_length_2, "_", "Sequence[a, b]", [{}]);
+    matcher_test!(blank_matches_string, "_", "\"abc\"", [[]]);
+    matcher_test!(blank_matches_integer, "_", "123", [[]]);
+    matcher_test!(blank_matches_real, "_", "2.5", [[]]);
+    matcher_test!(blank_matches_symbol, "_", "abc", [[]]);
+    matcher_test!(blank_matches_expression, "_", "f[a, b, c]", [[]]);
+    matcher_test!(blank_matches_empty_sequence, "_", "Sequence[]", [[]]);
+    matcher_test!(blank_matches_sequence_length_1, "_", "Sequence[a]", [[]]);
+    matcher_test!(blank_matches_sequence_length_2, "_", "Sequence[a, b]", [[]]);
     matcher_test!(
         blank_matches_sequence_length_3,
         "_",
         "Sequence[a, b, c]",
-        [{}]
+        [[]]
     );
 
     // Named blank
-    matcher_test!(named_blank_matches_string, "x_", "\"abc\"", [{ "x" => "\"abc\"" }]);
-    matcher_test!(named_blank_matches_integer, "x_", "123", [{ "x" => "123" }]);
-    matcher_test!(named_blank_matches_real, "x_", "2.5", [{ "x" => "2.5" }]);
-    matcher_test!(named_blank_matches_symbol, "x_", "abc", [{ "x" => "abc" }]);
-    matcher_test!(named_blank_matches_expression, "x_", "f[a, b, c]", [{ "x" => "f[a, b, c]" }]);
-    matcher_test!(named_blank_matches_empty_sequence, "x_", "Sequence[]", [{ "x" => "Sequence[]" }]);
-    matcher_test!(named_blank_matches_sequence_length_1, "x_", "Sequence[a]", [{ "x" => "Sequence[a]" }]);
-    matcher_test!(named_blank_matches_sequence_length_2, "x_", "Sequence[a, b]", [{ "x" => "Sequence[a, b]" }]);
-    matcher_test!(named_blank_matches_sequence_length_3, "x_", "Sequence[a, b, c]", [{ "x" => "Sequence[a, b, c]" }]);
+    matcher_test!(named_blank_matches_string, "x_", "\"abc\"", [[ ("x", "\"abc\"") ]]);
+    matcher_test!(named_blank_matches_integer, "x_", "123", [[ ("x", "123") ]]);
+    matcher_test!(named_blank_matches_real, "x_", "2.5", [[ ("x", "2.5") ]]);
+    matcher_test!(named_blank_matches_symbol, "x_", "abc", [[ ("x", "abc") ]]);
+    matcher_test!(named_blank_matches_expression, "x_", "f[a, b, c]", [[ ("x", "f[a, b, c]") ]]);
+    matcher_test!(named_blank_matches_empty_sequence, "x_", "Sequence[]", [[ ("x", "Sequence[]") ]]);
+    matcher_test!(named_blank_matches_sequence_length_1, "x_", "Sequence[a]", [[ ("x", "Sequence[a]") ]]);
+    matcher_test!(named_blank_matches_sequence_length_2, "x_", "Sequence[a, b]", [[ ("x", "Sequence[a, b]") ]]);
+    matcher_test!(named_blank_matches_sequence_length_3, "x_", "Sequence[a, b, c]", [[ ("x", "Sequence[a, b, c]") ]]);
 
     // Unnamed blank sequence
     matcher_test!(
         blank_sequence_matches_sequence_length_1,
         "__",
         "Sequence[a]",
-        [{}]
+        [[]]
     );
     matcher_test!(
         blank_sequence_matches_sequence_length_2,
         "__",
         "Sequence[a, b]",
-        [{}]
+        [[]]
     );
     matcher_test!(
         blank_sequence_matches_sequence_length_3,
         "__",
         "Sequence[a, b, c]",
-        [{}]
+        [[]]
     );
 
     // Named blank sequence
-    matcher_test!(named_blank_sequence_matches_sequence_length_1, "xs__", "Sequence[a]", [{ "xs" => "Sequence[a]" }]);
-    matcher_test!(named_blank_sequence_matches_sequence_length_2, "xs__", "Sequence[a, b]", [{ "xs" => "Sequence[a, b]" }]);
-    matcher_test!(named_blank_sequence_matches_sequence_length_3, "xs__", "Sequence[a, b, c]", [{ "xs" => "Sequence[a, b, c]" }]);
+    matcher_test!(named_blank_sequence_matches_sequence_length_1, "xs__", "Sequence[a]", [[ ("xs", "Sequence[a]") ]]);
+    matcher_test!(named_blank_sequence_matches_sequence_length_2, "xs__", "Sequence[a, b]", [[ ("xs", "Sequence[a, b]") ]]);
+    matcher_test!(named_blank_sequence_matches_sequence_length_3, "xs__", "Sequence[a, b, c]", [[ ("xs", "Sequence[a, b, c]") ]]);
 
     // Unnamed blank null sequence
     matcher_test!(
         blank_null_sequence_matches_empty_sequence,
         "___",
         "Sequence[]",
-        [{}]
+        [[]]
     );
     matcher_test!(
         blank_null_sequence_matches_sequence_length_1,
         "___",
         "Sequence[a]",
-        [{}]
+        [[]]
     );
     matcher_test!(
         blank_null_sequence_matches_sequence_length_2,
         "___",
         "Sequence[a, b]",
-        [{}]
+        [[]]
     );
     matcher_test!(
         blank_null_sequence_matches_sequence_length_3,
         "___",
         "Sequence[a, b, c]",
-        [{}]
+        [[]]
     );
 
     // Named blank null sequence
-    matcher_test!(named_blank_null_sequence_matches_empty_sequence, "xs___", "Sequence[]", [{ "xs" => "Sequence[]" }]);
-    matcher_test!(named_blank_null_sequence_matches_sequence_length_1, "xs___", "Sequence[a]", [{ "xs" => "Sequence[a]" }]);
-    matcher_test!(named_blank_null_sequence_matches_sequence_length_2, "xs___", "Sequence[a, b]", [{ "xs" => "Sequence[a, b]" }]);
-    matcher_test!(named_blank_null_sequence_matches_sequence_length_3, "xs___", "Sequence[a, b, c]", [{ "xs" => "Sequence[a, b, c]" }]);
+    matcher_test!(named_blank_null_sequence_matches_empty_sequence, "xs___", "Sequence[]", [[ ("xs", "Sequence[]") ]]);
+    matcher_test!(named_blank_null_sequence_matches_sequence_length_1, "xs___", "Sequence[a]", [[ ("xs", "Sequence[a]") ]]);
+    matcher_test!(named_blank_null_sequence_matches_sequence_length_2, "xs___", "Sequence[a, b]", [[ ("xs", "Sequence[a, b]") ]]);
+    matcher_test!(named_blank_null_sequence_matches_sequence_length_3, "xs___", "Sequence[a, b, c]", [[ ("xs", "Sequence[a, b, c]") ]]);
 
     // Blanks in head
-    matcher_test!(unnamed_blank_in_head, "_[a, b, c]", "abc[a, b, c]", [{}]);
-    matcher_test!(named_blank_in_head, "x_[a, b, c]", "abc[a, b, c]", [{ "x" => "abc" }]);
+    matcher_test!(unnamed_blank_in_head, "_[a, b, c]", "abc[a, b, c]", [[]]);
+    matcher_test!(named_blank_in_head, "x_[a, b, c]", "abc[a, b, c]", [[ ("x", "abc") ]]);
 
     mod free_functions {
         use super::*;
@@ -515,56 +530,56 @@ mod tests {
         matcher_test!(unmatchable_blank_sequence, "f[__]", "f[]", []);
 
         // Trivial cases
-        matcher_test!(exact_match, "f[a, b, c]", "f[a, b, c]", [{}]);
+        matcher_test!(exact_match, "f[a, b, c]", "f[a, b, c]", [[]]);
 
         // Unnamed blanks
-        matcher_test!(blank_in_first_element, "f[_, b, c]", "f[a, b, c]", [{}]);
-        matcher_test!(blank_in_second_element, "f[a, _, c]", "f[a, b, c]", [{}]);
-        matcher_test!(blank_in_third_element, "f[a, b, _]", "f[a, b, c]", [{}]);
+        matcher_test!(blank_in_first_element, "f[_, b, c]", "f[a, b, c]", [[]]);
+        matcher_test!(blank_in_second_element, "f[a, _, c]", "f[a, b, c]", [[]]);
+        matcher_test!(blank_in_third_element, "f[a, b, _]", "f[a, b, c]", [[]]);
 
         // Single named blank
-        matcher_test!(named_blank_in_first_element, "f[x_, b, c]", "f[a, b, c]", [{ "x" => "a" }]);
-        matcher_test!(named_blank_in_second_element, "f[a, x_, c]", "f[a, b, c]", [{ "x" => "b" }]);
-        matcher_test!(named_blank_in_third_element, "f[a, b, x_]", "f[a, b, c]", [{ "x" => "c" }]);
+        matcher_test!(named_blank_in_first_element, "f[x_, b, c]", "f[a, b, c]", [[ ("x", "a") ]]);
+        matcher_test!(named_blank_in_second_element, "f[a, x_, c]", "f[a, b, c]", [[ ("x", "b") ]]);
+        matcher_test!(named_blank_in_third_element, "f[a, b, x_]", "f[a, b, c]", [[ ("x", "c") ]]);
 
         // Multiple unnamed blanks
         matcher_test!(
             blank_in_first_and_second_element,
             "f[_, _, c]",
             "f[a, b, c]",
-            [{}]
+            [[]]
         );
         matcher_test!(
             blank_in_second_and_third_element,
             "f[a, _, _]",
             "f[a, b, c]",
-            [{}]
+            [[]]
         );
         matcher_test!(
             blank_in_first_and_third_element,
             "f[_, b, _]",
             "f[a, b, c]",
-            [{}]
+            [[]]
         );
-        matcher_test!(blank_in_all_elements, "f[_, _, _]", "f[a, b, c]", [{}]);
+        matcher_test!(blank_in_all_elements, "f[_, _, _]", "f[a, b, c]", [[]]);
 
         // Multiple named blanks
-        matcher_test!(named_blank_in_first_and_second_elements, "f[x_, y_, c]", "f[a, b, c]", [{ "x" => "a", "y" => "b" }]);
-        matcher_test!(named_blank_in_first_and_third_elements, "f[x_, b, y_]", "f[a, b, c]", [{ "x" => "a", "y" => "c" }]);
-        matcher_test!(named_blank_in_second_and_third_elements, "f[a, x_, y_]", "f[a, b, c]", [{ "x" => "b", "y" => "c" }]);
+        matcher_test!(named_blank_in_first_and_second_elements, "f[x_, y_, c]", "f[a, b, c]", [[ ("x", "a"), ("y", "b") ]]);
+        matcher_test!(named_blank_in_first_and_third_elements, "f[x_, b, y_]", "f[a, b, c]", [[ ("x", "a"), ("y", "c") ]]);
+        matcher_test!(named_blank_in_second_and_third_elements, "f[a, x_, y_]", "f[a, b, c]", [[ ("x", "b"), ("y", "c") ]]);
 
         // Multiple named blank sequences
         matcher_test!(multiple_blank_sequences, "f[xs__, ys__]", "f[a, b, c]", [
-            {"xs" => "Sequence[a]", "ys" => "Sequence[b, c]"},
-            {"xs" => "Sequence[a, b]", "ys" => "Sequence[c]"},
+            [ ("xs", "Sequence[a]"), ("ys", "Sequence[b, c]") ],
+            [ ("xs", "Sequence[a, b]"), ("ys", "Sequence[c]") ],
         ]);
 
         // Multiple named blank null sequences
         matcher_test!(multiple_blank_null_sequences, "f[xs___, ys___]", "f[a, b, c]", [
-            {"xs" => "Sequence[]", "ys" => "Sequence[a, b,c ]"},
-            {"xs" => "Sequence[a]", "ys" => "Sequence[b, c]"},
-            {"xs" => "Sequence[a, b]", "ys" => "Sequence[c]"},
-            {"xs" => "Sequence[a, b, c]", "ys" => "Sequence[]"},
+            [ ("xs", "Sequence[]"), ("ys", "Sequence[a, b,c ]") ],
+            [ ("xs", "Sequence[a]"), ("ys", "Sequence[b, c]") ],
+            [ ("xs", "Sequence[a, b]"), ("ys", "Sequence[c]") ],
+            [ ("xs", "Sequence[a, b, c]"), ("ys", "Sequence[]") ],
         ]);
     }
 
@@ -578,15 +593,15 @@ mod tests {
         matcher_test!(blank_seq_empty, "fc[__]", "fc[]", []);
 
         // Exact and order-independent matches
-        matcher_test!(blank_null_seq_empty, "fc[___]", "fc[]", [{}]);
-        matcher_test!(exact_match, "fc[a, b, c]", "fc[a, b, c]", [{}]);
-        matcher_test!(order_independent_match, "fc[a, b, c]", "fc[c, b, a]", [{}]);
-        matcher_test!(blank_order_independent, "fc[a, _, c]", "fc[c, _, a]", [{}]);
+        matcher_test!(blank_null_seq_empty, "fc[___]", "fc[]", [[]]);
+        matcher_test!(exact_match, "fc[a, b, c]", "fc[a, b, c]", [[]]);
+        matcher_test!(order_independent_match, "fc[a, b, c]", "fc[c, b, a]", [[]]);
+        matcher_test!(blank_order_independent, "fc[a, _, c]", "fc[c, _, a]", [[]]);
 
         // Single named blank variable
-        matcher_test!(named_blank_first, "fc[x_, b, c]", "fc[a, b, c]", [{ "x" => "a" }]);
-        matcher_test!(named_blank_second, "fc[a, x_, c]", "fc[a, b, c]", [{ "x" => "b" }]);
-        matcher_test!(named_blank_third, "fc[a, b, x_]", "fc[a, b, c]", [{ "x" => "c" }]);
+        matcher_test!(named_blank_first, "fc[x_, b, c]", "fc[a, b, c]", [[ "x", "a" ]]);
+        matcher_test!(named_blank_second, "fc[a, x_, c]", "fc[a, b, c]", [[ "x", "b" ]]);
+        matcher_test!(named_blank_third, "fc[a, b, x_]", "fc[a, b, c]", [[ "x", "c" ]]);
 
         // Two named blank variables
         matcher_test!(
@@ -594,8 +609,8 @@ mod tests {
             "fc[x_, y_, c]",
             "fc[a, b, c]",
             [
-                { "x" => "a", "y" => "b" },
-                { "x" => "b", "y" => "a" }
+                { "x", "a", "y", "b" },
+                { "x", "b", "y", "a" }
             ]
         );
 
@@ -604,8 +619,8 @@ mod tests {
             "fc[x_, b, y_]",
             "fc[a, b, c]",
             [
-                { "x" => "a", "y" => "c" },
-                { "x" => "c", "y" => "a" }
+                { "x", "a", "y", "c" },
+                { "x", "c", "y", "a" }
             ]
         );
 
@@ -614,8 +629,8 @@ mod tests {
             "fc[a, x_, y_]",
             "fc[a, b, c]",
             [
-                { "x" => "b", "y" => "c" },
-                { "x" => "c", "y" => "b" }
+                { "x", "b", "y", "c" },
+                { "x", "c", "y", "b" }
             ]
         );
 
@@ -625,18 +640,18 @@ mod tests {
             "fc[xs__, ys__]",
             "fc[a, b, c]",
             [
-                {"xs" => "Sequence[a]", "ys" => "Sequence[b, c]"},
-                {"xs" => "Sequence[a]", "ys" => "Sequence[c, b]"},
-                {"xs" => "Sequence[b]", "ys" => "Sequence[a, c]"},
-                {"xs" => "Sequence[b]", "ys" => "Sequence[c, a]"},
-                {"xs" => "Sequence[c]", "ys" => "Sequence[a, b]"},
-                {"xs" => "Sequence[c]", "ys" => "Sequence[b, a]"},
-                {"xs" => "Sequence[a, b]", "ys" => "Sequence[c]"},
-                {"xs" => "Sequence[b, a]", "ys" => "Sequence[c]"},
-                {"xs" => "Sequence[a, c]", "ys" => "Sequence[b]"},
-                {"xs" => "Sequence[c, a]", "ys" => "Sequence[b]"},
-                {"xs" => "Sequence[b, c]", "ys" => "Sequence[a]"},
-                {"xs" => "Sequence[c, b]", "ys" => "Sequence[a]"}
+                {"xs", "Sequence[a]", "ys", "Sequence[b, c]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[c, b]"},
+                {"xs", "Sequence[b]", "ys", "Sequence[a, c]"},
+                {"xs", "Sequence[b]", "ys", "Sequence[c, a]"},
+                {"xs", "Sequence[c]", "ys", "Sequence[a, b]"},
+                {"xs", "Sequence[c]", "ys", "Sequence[b, a]"},
+                {"xs", "Sequence[a, b]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[b, a]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[a, c]", "ys", "Sequence[b]"},
+                {"xs", "Sequence[c, a]", "ys", "Sequence[b]"},
+                {"xs", "Sequence[b, c]", "ys", "Sequence[a]"},
+                {"xs", "Sequence[c, b]", "ys", "Sequence[a]"}
             ]
         );
 
@@ -646,30 +661,30 @@ mod tests {
             "fc[xs___, ys___]",
             "fc[a, b, c]",
             [
-                {"xs" => "Sequence[]", "ys" => "Sequence[a, b, c]"},
-                {"xs" => "Sequence[]", "ys" => "Sequence[a, c, b]"},
-                {"xs" => "Sequence[]", "ys" => "Sequence[b, a, c]"},
-                {"xs" => "Sequence[]", "ys" => "Sequence[b, c, a]"},
-                {"xs" => "Sequence[]", "ys" => "Sequence[c, a, b]"},
-                {"xs" => "Sequence[]", "ys" => "Sequence[c, b, a]"},
-                {"xs" => "Sequence[a]", "ys" => "Sequence[b, c]"},
-                {"xs" => "Sequence[a]", "ys" => "Sequence[c, b]"},
-                {"xs" => "Sequence[b]", "ys" => "Sequence[a, c]"},
-                {"xs" => "Sequence[b]", "ys" => "Sequence[c, a]"},
-                {"xs" => "Sequence[c]", "ys" => "Sequence[a, b]"},
-                {"xs" => "Sequence[c]", "ys" => "Sequence[b, a]"},
-                {"xs" => "Sequence[a, b]", "ys" => "Sequence[c]"},
-                {"xs" => "Sequence[b, a]", "ys" => "Sequence[c]"},
-                {"xs" => "Sequence[a, c]", "ys" => "Sequence[b]"},
-                {"xs" => "Sequence[c, a]", "ys" => "Sequence[b]"},
-                {"xs" => "Sequence[b, c]", "ys" => "Sequence[a]"},
-                {"xs" => "Sequence[c, b]", "ys" => "Sequence[a]"},
-                {"xs" => "Sequence[a, b, c]", "ys" => "Sequence[]"},
-                {"xs" => "Sequence[a, c, b]", "ys" => "Sequence[]"},
-                {"xs" => "Sequence[b, a, c]", "ys" => "Sequence[]"},
-                {"xs" => "Sequence[b, c, a]", "ys" => "Sequence[]"},
-                {"xs" => "Sequence[c, a, b]", "ys" => "Sequence[]"},
-                {"xs" => "Sequence[c, b, a]", "ys" => "Sequence[]"},
+                {"xs", "Sequence[]", "ys", "Sequence[a, b, c]"},
+                {"xs", "Sequence[]", "ys", "Sequence[a, c, b]"},
+                {"xs", "Sequence[]", "ys", "Sequence[b, a, c]"},
+                {"xs", "Sequence[]", "ys", "Sequence[b, c, a]"},
+                {"xs", "Sequence[]", "ys", "Sequence[c, a, b]"},
+                {"xs", "Sequence[]", "ys", "Sequence[c, b, a]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[b, c]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[c, b]"},
+                {"xs", "Sequence[b]", "ys", "Sequence[a, c]"},
+                {"xs", "Sequence[b]", "ys", "Sequence[c, a]"},
+                {"xs", "Sequence[c]", "ys", "Sequence[a, b]"},
+                {"xs", "Sequence[c]", "ys", "Sequence[b, a]"},
+                {"xs", "Sequence[a, b]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[b, a]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[a, c]", "ys", "Sequence[b]"},
+                {"xs", "Sequence[c, a]", "ys", "Sequence[b]"},
+                {"xs", "Sequence[b, c]", "ys", "Sequence[a]"},
+                {"xs", "Sequence[c, b]", "ys", "Sequence[a]"},
+                {"xs", "Sequence[a, b, c]", "ys", "Sequence[]"},
+                {"xs", "Sequence[a, c, b]", "ys", "Sequence[]"},
+                {"xs", "Sequence[b, a, c]", "ys", "Sequence[]"},
+                {"xs", "Sequence[b, c, a]", "ys", "Sequence[]"},
+                {"xs", "Sequence[c, a, b]", "ys", "Sequence[]"},
+                {"xs", "Sequence[c, b, a]", "ys", "Sequence[]"},
             ]
         );
     }
@@ -683,10 +698,8 @@ mod tests {
         matcher_test!(blank_seq_empty, "fa[__]", "fa[]", []);
 
         // Exact and application-independent matches
-        matcher_test!(blank_null_seq_empty, "fa[___]", "fa[]", [{}]);
-        matcher_test!(exact_match, "fa[a, b, c]", "fa[a, b, c]", [{}]);
-        // TODO: matcher_test!(application_independent_match_1, "fa[fa[a, b], c]", "fa[a, b, c]", [{}]);
-        // TODO: matcher_test!(application_independent_match_2, "fa[a, fa[b, c]]", "fa[a, b, c]", [{}]);
+        matcher_test!(blank_null_seq_empty, "fa[___]", "fa[]", [[]]);
+        matcher_test!(exact_match, "fa[a, b, c]", "fa[a, b, c]", [[]]);
 
         // Multiple blank sequence variables
         matcher_test!(
@@ -694,26 +707,26 @@ mod tests {
             "fa[xs__, ys__]",
             "fa[a, b, c]",
             [
-                {"xs" => "Sequence[a]", "ys" => "Sequence[b, c]"},
-                {"xs" => "Sequence[a]", "ys" => "Sequence[fa[b], c]"},
-                {"xs" => "Sequence[a]", "ys" => "Sequence[b, fa[c]]"},
-                {"xs" => "Sequence[a]", "ys" => "Sequence[fa[b], fa[c]]"},
-                {"xs" => "Sequence[a]", "ys" => "Sequence[fa[b, c]]"},
-                {"xs" => "Sequence[fa[a]]", "ys" => "Sequence[b, c]"},
-                {"xs" => "Sequence[fa[a]]", "ys" => "Sequence[fa[b], c]"},
-                {"xs" => "Sequence[fa[a]]", "ys" => "Sequence[b, fa[c]]"},
-                {"xs" => "Sequence[fa[a]]", "ys" => "Sequence[fa[b], fa[c]]"},
-                {"xs" => "Sequence[fa[a]]", "ys" => "Sequence[fa[b, c]]"},
-                {"xs" => "Sequence[a, b]", "ys" => "Sequence[c]"},
-                {"xs" => "Sequence[a, b]", "ys" => "Sequence[fa[c]]"},
-                {"xs" => "Sequence[fa[a], b]", "ys" => "Sequence[c]"},
-                {"xs" => "Sequence[fa[a], b]", "ys" => "Sequence[fa[c]]"},
-                {"xs" => "Sequence[a, fa[b]]", "ys" => "Sequence[c]"},
-                {"xs" => "Sequence[a, fa[b]]", "ys" => "Sequence[fa[c]]"},
-                {"xs" => "Sequence[fa[a], fa[b]]", "ys" => "Sequence[c]"},
-                {"xs" => "Sequence[fa[a], fa[b]]", "ys" => "Sequence[fa[c]]"},
-                {"xs" => "Sequence[fa[a, b]]", "ys" => "Sequence[c]"},
-                {"xs" => "Sequence[fa[a, b]]", "ys" => "Sequence[fa[c]]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[b, c]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[fa[b], c]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[b, fa[c]]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[fa[b], fa[c]]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[fa[b, c]]"},
+                {"xs", "Sequence[fa[a]]", "ys", "Sequence[b, c]"},
+                {"xs", "Sequence[fa[a]]", "ys", "Sequence[fa[b], c]"},
+                {"xs", "Sequence[fa[a]]", "ys", "Sequence[b, fa[c]]"},
+                {"xs", "Sequence[fa[a]]", "ys", "Sequence[fa[b], fa[c]]"},
+                {"xs", "Sequence[fa[a]]", "ys", "Sequence[fa[b, c]]"},
+                {"xs", "Sequence[a, b]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[a, b]", "ys", "Sequence[fa[c]]"},
+                {"xs", "Sequence[fa[a], b]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[fa[a], b]", "ys", "Sequence[fa[c]]"},
+                {"xs", "Sequence[a, fa[b]]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[a, fa[b]]", "ys", "Sequence[fa[c]]"},
+                {"xs", "Sequence[fa[a], fa[b]]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[fa[a], fa[b]]", "ys", "Sequence[fa[c]]"},
+                {"xs", "Sequence[fa[a, b]]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[fa[a, b]]", "ys", "Sequence[fa[c]]"},
             ]
         );
 
@@ -723,52 +736,52 @@ mod tests {
             "fa[xs___, ys___]",
             "fa[a, b, c]",
             [
-                {"xs" => "Sequence[]", "ys" => "Sequence[a, b, c]"},
-                {"xs" => "Sequence[]", "ys" => "Sequence[fa[a], b, c]"},
-                {"xs" => "Sequence[]", "ys" => "Sequence[a, fa[b], c]"},
-                {"xs" => "Sequence[]", "ys" => "Sequence[a, b, fa[c]]"},
-                {"xs" => "Sequence[]", "ys" => "Sequence[fa[a], fa[b], c]"},
-                {"xs" => "Sequence[]", "ys" => "Sequence[fa[a], b, fa[c]]"},
-                {"xs" => "Sequence[]", "ys" => "Sequence[a, fa[b], fa[c]]"},
-                {"xs" => "Sequence[]", "ys" => "Sequence[fa[a], fa[b], fa[c]]"},
-                {"xs" => "Sequence[]", "ys" => "Sequence[fa[a, b], c]"},
-                {"xs" => "Sequence[]", "ys" => "Sequence[fa[a, b], fa[c]]"},
-                {"xs" => "Sequence[]", "ys" => "Sequence[a, fa[b, c]]"},
-                {"xs" => "Sequence[]", "ys" => "Sequence[fa[a], fa[b, c]]"},
-                {"xs" => "Sequence[]", "ys" => "Sequence[fa[a, b, c]]"},
-                {"xs" => "Sequence[a]", "ys" => "Sequence[b, c]"},
-                {"xs" => "Sequence[a]", "ys" => "Sequence[fa[b], c]"},
-                {"xs" => "Sequence[a]", "ys" => "Sequence[b, fa[c]]"},
-                {"xs" => "Sequence[a]", "ys" => "Sequence[fa[b], fa[c]]"},
-                {"xs" => "Sequence[a]", "ys" => "Sequence[fa[b, c]]"},
-                {"xs" => "Sequence[fa[a]]", "ys" => "Sequence[b, c]"},
-                {"xs" => "Sequence[fa[a]]", "ys" => "Sequence[fa[b], c]"},
-                {"xs" => "Sequence[fa[a]]", "ys" => "Sequence[b, fa[c]]"},
-                {"xs" => "Sequence[fa[a]]", "ys" => "Sequence[fa[b], fa[c]]"},
-                {"xs" => "Sequence[fa[a]]", "ys" => "Sequence[fa[b, c]]"},
-                {"xs" => "Sequence[a, b]", "ys" => "Sequence[c]"},
-                {"xs" => "Sequence[a, b]", "ys" => "Sequence[fa[c]]"},
-                {"xs" => "Sequence[fa[a], b]", "ys" => "Sequence[c]"},
-                {"xs" => "Sequence[fa[a], b]", "ys" => "Sequence[fa[c]]"},
-                {"xs" => "Sequence[a, fa[b]]", "ys" => "Sequence[c]"},
-                {"xs" => "Sequence[a, fa[b]]", "ys" => "Sequence[fa[c]]"},
-                {"xs" => "Sequence[fa[a], fa[b]]", "ys" => "Sequence[c]"},
-                {"xs" => "Sequence[fa[a], fa[b]]", "ys" => "Sequence[fa[c]]"},
-                {"xs" => "Sequence[fa[a, b]]", "ys" => "Sequence[c]"},
-                {"xs" => "Sequence[fa[a, b]]", "ys" => "Sequence[fa[c]]"},
-                {"xs" => "Sequence[a, b, c]", "ys" => "Sequence[]"},
-                {"xs" => "Sequence[fa[a], b, c]", "ys" => "Sequence[]"},
-                {"xs" => "Sequence[a, fa[b], c]", "ys" => "Sequence[]"},
-                {"xs" => "Sequence[a, b, fa[c]]", "ys" => "Sequence[]"},
-                {"xs" => "Sequence[fa[a], fa[b], c]", "ys" => "Sequence[]"},
-                {"xs" => "Sequence[fa[a], b, fa[c]]", "ys" => "Sequence[]"},
-                {"xs" => "Sequence[a, fa[b], fa[c]]", "ys" => "Sequence[]"},
-                {"xs" => "Sequence[fa[a], fa[b], fa[c]]", "ys" => "Sequence[]"},
-                {"xs" => "Sequence[fa[a, b], c]", "ys" => "Sequence[]"},
-                {"xs" => "Sequence[fa[a, b], fa[c]]", "ys" => "Sequence[]"},
-                {"xs" => "Sequence[a, fa[b, c]]", "ys" => "Sequence[]"},
-                {"xs" => "Sequence[fa[a], fa[b, c]]", "ys" => "Sequence[]"},
-                {"xs" => "Sequence[fa[a, b, c]]", "ys" => "Sequence[]"},
+                {"xs", "Sequence[]", "ys", "Sequence[a, b, c]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fa[a], b, c]"},
+                {"xs", "Sequence[]", "ys", "Sequence[a, fa[b], c]"},
+                {"xs", "Sequence[]", "ys", "Sequence[a, b, fa[c]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fa[a], fa[b], c]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fa[a], b, fa[c]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[a, fa[b], fa[c]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fa[a], fa[b], fa[c]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fa[a, b], c]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fa[a, b], fa[c]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[a, fa[b, c]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fa[a], fa[b, c]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fa[a, b, c]]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[b, c]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[fa[b], c]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[b, fa[c]]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[fa[b], fa[c]]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[fa[b, c]]"},
+                {"xs", "Sequence[fa[a]]", "ys", "Sequence[b, c]"},
+                {"xs", "Sequence[fa[a]]", "ys", "Sequence[fa[b], c]"},
+                {"xs", "Sequence[fa[a]]", "ys", "Sequence[b, fa[c]]"},
+                {"xs", "Sequence[fa[a]]", "ys", "Sequence[fa[b], fa[c]]"},
+                {"xs", "Sequence[fa[a]]", "ys", "Sequence[fa[b, c]]"},
+                {"xs", "Sequence[a, b]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[a, b]", "ys", "Sequence[fa[c]]"},
+                {"xs", "Sequence[fa[a], b]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[fa[a], b]", "ys", "Sequence[fa[c]]"},
+                {"xs", "Sequence[a, fa[b]]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[a, fa[b]]", "ys", "Sequence[fa[c]]"},
+                {"xs", "Sequence[fa[a], fa[b]]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[fa[a], fa[b]]", "ys", "Sequence[fa[c]]"},
+                {"xs", "Sequence[fa[a, b]]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[fa[a, b]]", "ys", "Sequence[fa[c]]"},
+                {"xs", "Sequence[a, b, c]", "ys", "Sequence[]"},
+                {"xs", "Sequence[fa[a], b, c]", "ys", "Sequence[]"},
+                {"xs", "Sequence[a, fa[b], c]", "ys", "Sequence[]"},
+                {"xs", "Sequence[a, b, fa[c]]", "ys", "Sequence[]"},
+                {"xs", "Sequence[fa[a], fa[b], c]", "ys", "Sequence[]"},
+                {"xs", "Sequence[fa[a], b, fa[c]]", "ys", "Sequence[]"},
+                {"xs", "Sequence[a, fa[b], fa[c]]", "ys", "Sequence[]"},
+                {"xs", "Sequence[fa[a], fa[b], fa[c]]", "ys", "Sequence[]"},
+                {"xs", "Sequence[fa[a, b], c]", "ys", "Sequence[]"},
+                {"xs", "Sequence[fa[a, b], fa[c]]", "ys", "Sequence[]"},
+                {"xs", "Sequence[a, fa[b, c]]", "ys", "Sequence[]"},
+                {"xs", "Sequence[fa[a], fa[b, c]]", "ys", "Sequence[]"},
+                {"xs", "Sequence[fa[a, b, c]]", "ys", "Sequence[]"},
             ]
         );
     }
@@ -787,48 +800,367 @@ mod tests {
             "fac[xs__, ys__]",
             "fac[a, b, c]",
             [
-                {"xs" => "Sequence[a]", "ys" => "Sequence[b, c]"},
-                {"xs" => "Sequence[a]", "ys" => "Sequence[fac[b], c]"},
-                {"xs" => "Sequence[a]", "ys" => "Sequence[b, fac[c]]"},
-                {"xs" => "Sequence[a]", "ys" => "Sequence[fac[b], fac[c]]"},
-                {"xs" => "Sequence[a]", "ys" => "Sequence[fac[b, c]]"},
-                {"xs" => "Sequence[a]", "ys" => "Sequence[c, b]"},
-                {"xs" => "Sequence[a]", "ys" => "Sequence[fac[c], b]"},
-                {"xs" => "Sequence[a]", "ys" => "Sequence[c, fac[b]]"},
-                {"xs" => "Sequence[a]", "ys" => "Sequence[fac[c], fac[b]]"},
-                {"xs" => "Sequence[a]", "ys" => "Sequence[fac[c, b]]"},
-                {"xs" => "Sequence[fac[a]]", "ys" => "Sequence[b, c]"},
-                {"xs" => "Sequence[fac[a]]", "ys" => "Sequence[fac[b], c]"},
-                {"xs" => "Sequence[fac[a]]", "ys" => "Sequence[b, fac[c]]"},
-                {"xs" => "Sequence[fac[a]]", "ys" => "Sequence[fac[b], fac[c]]"},
-                {"xs" => "Sequence[fac[a]]", "ys" => "Sequence[fac[b, c]]"},
-                {"xs" => "Sequence[fac[a]]", "ys" => "Sequence[c, b]"},
-                {"xs" => "Sequence[fac[a]]", "ys" => "Sequence[fac[c], b]"},
-                {"xs" => "Sequence[fac[a]]", "ys" => "Sequence[c, fac[b]]"},
-                {"xs" => "Sequence[fac[a]]", "ys" => "Sequence[fac[c], fac[b]]"},
-                {"xs" => "Sequence[fac[a]]", "ys" => "Sequence[fac[c, b]]"},
-                {"xs" => "Sequence[a, b]", "ys" => "Sequence[c]"},
-                {"xs" => "Sequence[a, b]", "ys" => "Sequence[fac[c]]"},
-                {"xs" => "Sequence[fac[a], b]", "ys" => "Sequence[c]"},
-                {"xs" => "Sequence[fac[a], b]", "ys" => "Sequence[fac[c]]"},
-                {"xs" => "Sequence[a, fac[b]]", "ys" => "Sequence[c]"},
-                {"xs" => "Sequence[a, fac[b]]", "ys" => "Sequence[fac[c]]"},
-                {"xs" => "Sequence[fac[a], fac[b]]", "ys" => "Sequence[c]"},
-                {"xs" => "Sequence[fac[a], fac[b]]", "ys" => "Sequence[fac[c]]"},
-                {"xs" => "Sequence[fac[a, b]]", "ys" => "Sequence[c]"},
-                {"xs" => "Sequence[fac[a, b]]", "ys" => "Sequence[fac[c]]"},
-                {"xs" => "Sequence[b, a]", "ys" => "Sequence[c]"},
-                {"xs" => "Sequence[b, a]", "ys" => "Sequence[fac[c]]"},
-                {"xs" => "Sequence[fac[b], a]", "ys" => "Sequence[c]"},
-                {"xs" => "Sequence[fac[b], a]", "ys" => "Sequence[fac[c]]"},
-                {"xs" => "Sequence[b, fac[a]]", "ys" => "Sequence[c]"},
-                {"xs" => "Sequence[b, fac[a]]", "ys" => "Sequence[fac[c]]"},
-                {"xs" => "Sequence[fac[b], fac[a]]", "ys" => "Sequence[c]"},
-                {"xs" => "Sequence[fac[b], fac[a]]", "ys" => "Sequence[fac[c]]"},
-                {"xs" => "Sequence[fac[b, a]]", "ys" => "Sequence[c]"},
-                {"xs" => "Sequence[fac[b, a]]", "ys" => "Sequence[fac[c]]"},
+                // A BC
+                {"xs", "Sequence[a]", "ys", "Sequence[b, c]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[fac[b], c]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[b, fac[c]]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[fac[b], fac[c]]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[fac[b, c]]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[c, b]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[fac[c], b]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[c, fac[b]]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[fac[c], fac[b]]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[fac[c, b]]"},
+                {"xs", "Sequence[fac[a]]", "ys", "Sequence[b, c]"},
+                {"xs", "Sequence[fac[a]]", "ys", "Sequence[fac[b], c]"},
+                {"xs", "Sequence[fac[a]]", "ys", "Sequence[b, fac[c]]"},
+                {"xs", "Sequence[fac[a]]", "ys", "Sequence[fac[b], fac[c]]"},
+                {"xs", "Sequence[fac[a]]", "ys", "Sequence[fac[b, c]]"},
+                {"xs", "Sequence[fac[a]]", "ys", "Sequence[c, b]"},
+                {"xs", "Sequence[fac[a]]", "ys", "Sequence[fac[c], b]"},
+                {"xs", "Sequence[fac[a]]", "ys", "Sequence[c, fac[b]]"},
+                {"xs", "Sequence[fac[a]]", "ys", "Sequence[fac[c], fac[b]]"},
+                {"xs", "Sequence[fac[a]]", "ys", "Sequence[fac[c, b]]"},
 
-                // TODO: Where is `b` on `xs`?
+                // B AC
+                {"xs", "Sequence[b]", "ys", "Sequence[a, c]"},
+                {"xs", "Sequence[b]", "ys", "Sequence[fac[a], c]"},
+                {"xs", "Sequence[b]", "ys", "Sequence[a, fac[c]]"},
+                {"xs", "Sequence[b]", "ys", "Sequence[fac[a], fac[c]]"},
+                {"xs", "Sequence[b]", "ys", "Sequence[fac[a, c]]"},
+                {"xs", "Sequence[b]", "ys", "Sequence[c, a]"},
+                {"xs", "Sequence[b]", "ys", "Sequence[fac[c], a]"},
+                {"xs", "Sequence[b]", "ys", "Sequence[c, fac[a]]"},
+                {"xs", "Sequence[b]", "ys", "Sequence[fac[c], fac[a]]"},
+                {"xs", "Sequence[b]", "ys", "Sequence[fac[c, a]]"},
+                {"xs", "Sequence[fac[b]]", "ys", "Sequence[a, c]"},
+                {"xs", "Sequence[fac[b]]", "ys", "Sequence[fac[a], c]"},
+                {"xs", "Sequence[fac[b]]", "ys", "Sequence[a, fac[c]]"},
+                {"xs", "Sequence[fac[b]]", "ys", "Sequence[fac[a], fac[c]]"},
+                {"xs", "Sequence[fac[b]]", "ys", "Sequence[fac[a, c]]"},
+                {"xs", "Sequence[fac[b]]", "ys", "Sequence[c, a]"},
+                {"xs", "Sequence[fac[b]]", "ys", "Sequence[fac[c], a]"},
+                {"xs", "Sequence[fac[b]]", "ys", "Sequence[c, fac[a]]"},
+                {"xs", "Sequence[fac[b]]", "ys", "Sequence[fac[c], fac[a]]"},
+                {"xs", "Sequence[fac[b]]", "ys", "Sequence[fac[c, a]]"},
+
+                // C AB
+                {"xs", "Sequence[c]", "ys", "Sequence[a, b]"},
+                {"xs", "Sequence[c]", "ys", "Sequence[fac[a], b]"},
+                {"xs", "Sequence[c]", "ys", "Sequence[a, fac[b]]"},
+                {"xs", "Sequence[c]", "ys", "Sequence[fac[a], fac[b]]"},
+                {"xs", "Sequence[c]", "ys", "Sequence[fac[a, b]]"},
+                {"xs", "Sequence[c]", "ys", "Sequence[b, a]"},
+                {"xs", "Sequence[c]", "ys", "Sequence[fac[b], a]"},
+                {"xs", "Sequence[c]", "ys", "Sequence[b, fac[a]]"},
+                {"xs", "Sequence[c]", "ys", "Sequence[fac[b], fac[a]]"},
+                {"xs", "Sequence[c]", "ys", "Sequence[fac[b, a]]"},
+                {"xs", "Sequence[fac[c]]", "ys", "Sequence[a, b]"},
+                {"xs", "Sequence[fac[c]]", "ys", "Sequence[fac[a], b]"},
+                {"xs", "Sequence[fac[c]]", "ys", "Sequence[a, fac[b]]"},
+                {"xs", "Sequence[fac[c]]", "ys", "Sequence[fac[a], fac[b]]"},
+                {"xs", "Sequence[fac[c]]", "ys", "Sequence[fac[a, b]]"},
+                {"xs", "Sequence[fac[c]]", "ys", "Sequence[b, a]"},
+                {"xs", "Sequence[fac[c]]", "ys", "Sequence[fac[b], a]"},
+                {"xs", "Sequence[fac[c]]", "ys", "Sequence[b, fac[a]]"},
+                {"xs", "Sequence[fac[c]]", "ys", "Sequence[fac[b], fac[a]]"},
+                {"xs", "Sequence[fac[c]]", "ys", "Sequence[fac[b, a]]"},
+
+                // AB C
+                {"xs", "Sequence[a, b]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[a, b]", "ys", "Sequence[fac[c]]"},
+                {"xs", "Sequence[fac[a], b]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[fac[a], b]", "ys", "Sequence[fac[c]]"},
+                {"xs", "Sequence[a, fac[b]]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[a, fac[b]]", "ys", "Sequence[fac[c]]"},
+                {"xs", "Sequence[fac[a], fac[b]]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[fac[a], fac[b]]", "ys", "Sequence[fac[c]]"},
+                {"xs", "Sequence[fac[a, b]]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[fac[a, b]]", "ys", "Sequence[fac[c]]"},
+                {"xs", "Sequence[b, a]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[b, a]", "ys", "Sequence[fac[c]]"},
+                {"xs", "Sequence[fac[b], a]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[fac[b], a]", "ys", "Sequence[fac[c]]"},
+                {"xs", "Sequence[b, fac[a]]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[b, fac[a]]", "ys", "Sequence[fac[c]]"},
+                {"xs", "Sequence[fac[b], fac[a]]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[fac[b], fac[a]]", "ys", "Sequence[fac[c]]"},
+                {"xs", "Sequence[fac[b, a]]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[fac[b, a]]", "ys", "Sequence[fac[c]]"},
+
+                // AC B
+                {"xs", "Sequence[a, c]", "ys", "Sequence[b]"},
+                {"xs", "Sequence[a, c]", "ys", "Sequence[fac[b]]"},
+                {"xs", "Sequence[fac[a], c]", "ys", "Sequence[b]"},
+                {"xs", "Sequence[fac[a], c]", "ys", "Sequence[fac[b]]"},
+                {"xs", "Sequence[a, fac[c]]", "ys", "Sequence[b]"},
+                {"xs", "Sequence[a, fac[c]]", "ys", "Sequence[fac[b]]"},
+                {"xs", "Sequence[fac[a], fac[c]]", "ys", "Sequence[b]"},
+                {"xs", "Sequence[fac[a], fac[c]]", "ys", "Sequence[fac[b]]"},
+                {"xs", "Sequence[fac[a, c]]", "ys", "Sequence[b]"},
+                {"xs", "Sequence[fac[a, c]]", "ys", "Sequence[fac[b]]"},
+                {"xs", "Sequence[c, a]", "ys", "Sequence[b]"},
+                {"xs", "Sequence[c, a]", "ys", "Sequence[fac[b]]"},
+                {"xs", "Sequence[fac[c], a]", "ys", "Sequence[b]"},
+                {"xs", "Sequence[fac[c], a]", "ys", "Sequence[fac[b]]"},
+                {"xs", "Sequence[c, fac[a]]", "ys", "Sequence[b]"},
+                {"xs", "Sequence[c, fac[a]]", "ys", "Sequence[fac[b]]"},
+                {"xs", "Sequence[fac[c], fac[a]]", "ys", "Sequence[b]"},
+                {"xs", "Sequence[fac[c], fac[a]]", "ys", "Sequence[fac[b]]"},
+                {"xs", "Sequence[fac[c, a]]", "ys", "Sequence[b]"},
+                {"xs", "Sequence[fac[c, a]]", "ys", "Sequence[fac[b]]"},
+
+                // BC A
+                {"xs", "Sequence[b, c]", "ys", "Sequence[a]"},
+                {"xs", "Sequence[b, c]", "ys", "Sequence[fac[a]]"},
+                {"xs", "Sequence[fac[b], c]", "ys", "Sequence[a]"},
+                {"xs", "Sequence[fac[b], c]", "ys", "Sequence[fac[a]]"},
+                {"xs", "Sequence[b, fac[c]]", "ys", "Sequence[a]"},
+                {"xs", "Sequence[b, fac[c]]", "ys", "Sequence[fac[a]]"},
+                {"xs", "Sequence[fac[b], fac[c]]", "ys", "Sequence[a]"},
+                {"xs", "Sequence[fac[b], fac[c]]", "ys", "Sequence[fac[a]]"},
+                {"xs", "Sequence[fac[b, c]]", "ys", "Sequence[a]"},
+                {"xs", "Sequence[fac[b, c]]", "ys", "Sequence[fac[a]]"},
+                {"xs", "Sequence[c, b]", "ys", "Sequence[a]"},
+                {"xs", "Sequence[c, b]", "ys", "Sequence[fac[a]]"},
+                {"xs", "Sequence[fac[c], b]", "ys", "Sequence[a]"},
+                {"xs", "Sequence[fac[c], b]", "ys", "Sequence[fac[a]]"},
+                {"xs", "Sequence[c, fac[b]]", "ys", "Sequence[a]"},
+                {"xs", "Sequence[c, fac[b]]", "ys", "Sequence[fac[a]]"},
+                {"xs", "Sequence[fac[c], fac[b]]", "ys", "Sequence[a]"},
+                {"xs", "Sequence[fac[c], fac[b]]", "ys", "Sequence[fac[a]]"},
+                {"xs", "Sequence[fac[c, b]]", "ys", "Sequence[a]"},
+                {"xs", "Sequence[fac[c, b]]", "ys", "Sequence[fac[a]]"},
+            ]
+        );
+
+        // Multiple blank null sequence variables
+        matcher_test!(
+            multiple_blank_null_sequences,
+            "fac[xs___, ys___]",
+            "fac[a, b, c]",
+            [
+                // _ ABC
+                {"xs", "Sequence[]", "ys", "Sequence[a, b, c]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[a], b, c]"},
+                {"xs", "Sequence[]", "ys", "Sequence[a, fac[b], c]"},
+                {"xs", "Sequence[]", "ys", "Sequence[a, b, fac[c]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[a], fac[b], c]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[a], b, fac[c]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[a, fac[b], fac[c]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[a], fac[b], fac[c]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[a, b], c]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[a, b], fac[c]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[a, fac[b, c]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[a], fac[b, c]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[a, b, c]]"},
+
+                // _ ACB
+                {"xs", "Sequence[]", "ys", "Sequence[a, c, b]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[a], c, b]"},
+                {"xs", "Sequence[]", "ys", "Sequence[a, fac[c], b]"},
+                {"xs", "Sequence[]", "ys", "Sequence[a, c, fac[b]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[a], fac[c], b]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[a], c, fac[b]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[a, fac[c], fac[b]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[a], fac[c], fac[b]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[a, c], b]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[a, c], fac[b]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[a, fac[c, b]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[a], fac[c, b]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[a, c, b]]"},
+
+                // _ BAC
+                {"xs", "Sequence[]", "ys", "Sequence[b, a, c]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[b], a, c]"},
+                {"xs", "Sequence[]", "ys", "Sequence[b, fac[a], c]"},
+                {"xs", "Sequence[]", "ys", "Sequence[b, a, fac[c]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[b], fac[a], c]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[b], a, fac[c]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[b, fac[a], fac[c]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[b], fac[a], fac[c]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[b, a], c]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[b, a], fac[c]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[b, fac[a, c]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[b], fac[a, c]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[b, a, c]]"},
+
+                // _ BCA
+                {"xs", "Sequence[]", "ys", "Sequence[b, c, a]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[b], c, a]"},
+                {"xs", "Sequence[]", "ys", "Sequence[b, fac[c], a]"},
+                {"xs", "Sequence[]", "ys", "Sequence[b, c, fac[a]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[b], fac[c], a]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[b], c, fac[a]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[b, fac[c], fac[a]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[b], fac[c], fac[a]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[b, c], a]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[b, c], fac[a]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[b, fac[c, a]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[b], fac[c, a]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[b, c, a]]"},
+
+                // _ CAB
+                {"xs", "Sequence[]", "ys", "Sequence[c, a, b]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[c], a, b]"},
+                {"xs", "Sequence[]", "ys", "Sequence[c, fac[a], b]"},
+                {"xs", "Sequence[]", "ys", "Sequence[c, a, fac[b]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[c], fac[a], b]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[c], a, fac[b]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[c, fac[a], fac[b]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[c], fac[a], fac[b]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[c, a], b]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[c, a], fac[b]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[c, fac[a, b]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[c], fac[a, b]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[c, a, b]]"},
+
+                // _ CBA
+                {"xs", "Sequence[]", "ys", "Sequence[c, b, a]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[c], b, a]"},
+                {"xs", "Sequence[]", "ys", "Sequence[c, fac[b], a]"},
+                {"xs", "Sequence[]", "ys", "Sequence[c, b, fac[a]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[c], fac[b], a]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[c], b, fac[a]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[c, fac[b], fac[a]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[c], fac[b], fac[a]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[c, b], a]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[c, b], fac[a]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[c, fac[b, a]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[c], fac[b, a]]"},
+                {"xs", "Sequence[]", "ys", "Sequence[fac[c, b, a]]"},
+
+                // A BC
+                {"xs", "Sequence[a]", "ys", "Sequence[b, c]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[fac[b], c]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[b, fac[c]]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[fac[b], fac[c]]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[fac[b, c]]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[c, b]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[fac[c], b]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[c, fac[b]]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[fac[c], fac[b]]"},
+                {"xs", "Sequence[a]", "ys", "Sequence[fac[c, b]]"},
+                {"xs", "Sequence[fac[a]]", "ys", "Sequence[b, c]"},
+                {"xs", "Sequence[fac[a]]", "ys", "Sequence[fac[b], c]"},
+                {"xs", "Sequence[fac[a]]", "ys", "Sequence[b, fac[c]]"},
+                {"xs", "Sequence[fac[a]]", "ys", "Sequence[fac[b], fac[c]]"},
+                {"xs", "Sequence[fac[a]]", "ys", "Sequence[fac[b, c]]"},
+                {"xs", "Sequence[fac[a]]", "ys", "Sequence[c, b]"},
+                {"xs", "Sequence[fac[a]]", "ys", "Sequence[fac[c], b]"},
+                {"xs", "Sequence[fac[a]]", "ys", "Sequence[c, fac[b]]"},
+                {"xs", "Sequence[fac[a]]", "ys", "Sequence[fac[c], fac[b]]"},
+                {"xs", "Sequence[fac[a]]", "ys", "Sequence[fac[c, b]]"},
+
+                // B AC
+                {"xs", "Sequence[b]", "ys", "Sequence[a, c]"},
+                {"xs", "Sequence[b]", "ys", "Sequence[fac[a], c]"},
+                {"xs", "Sequence[b]", "ys", "Sequence[a, fac[c]]"},
+                {"xs", "Sequence[b]", "ys", "Sequence[fac[a], fac[c]]"},
+                {"xs", "Sequence[b]", "ys", "Sequence[fac[a, c]]"},
+                {"xs", "Sequence[b]", "ys", "Sequence[c, a]"},
+                {"xs", "Sequence[b]", "ys", "Sequence[fac[c], a]"},
+                {"xs", "Sequence[b]", "ys", "Sequence[c, fac[a]]"},
+                {"xs", "Sequence[b]", "ys", "Sequence[fac[c], fac[a]]"},
+                {"xs", "Sequence[b]", "ys", "Sequence[fac[c, a]]"},
+                {"xs", "Sequence[fac[b]]", "ys", "Sequence[a, c]"},
+                {"xs", "Sequence[fac[b]]", "ys", "Sequence[fac[a], c]"},
+                {"xs", "Sequence[fac[b]]", "ys", "Sequence[a, fac[c]]"},
+                {"xs", "Sequence[fac[b]]", "ys", "Sequence[fac[a], fac[c]]"},
+                {"xs", "Sequence[fac[b]]", "ys", "Sequence[fac[a, c]]"},
+                {"xs", "Sequence[fac[b]]", "ys", "Sequence[c, a]"},
+                {"xs", "Sequence[fac[b]]", "ys", "Sequence[fac[c], a]"},
+                {"xs", "Sequence[fac[b]]", "ys", "Sequence[c, fac[a]]"},
+                {"xs", "Sequence[fac[b]]", "ys", "Sequence[fac[c], fac[a]]"},
+                {"xs", "Sequence[fac[b]]", "ys", "Sequence[fac[c, a]]"},
+
+                // C AB
+                {"xs", "Sequence[c]", "ys", "Sequence[a, b]"},
+                {"xs", "Sequence[c]", "ys", "Sequence[fac[a], b]"},
+                {"xs", "Sequence[c]", "ys", "Sequence[a, fac[b]]"},
+                {"xs", "Sequence[c]", "ys", "Sequence[fac[a], fac[b]]"},
+                {"xs", "Sequence[c]", "ys", "Sequence[fac[a, b]]"},
+                {"xs", "Sequence[c]", "ys", "Sequence[b, a]"},
+                {"xs", "Sequence[c]", "ys", "Sequence[fac[b], a]"},
+                {"xs", "Sequence[c]", "ys", "Sequence[b, fac[a]]"},
+                {"xs", "Sequence[c]", "ys", "Sequence[fac[b], fac[a]]"},
+                {"xs", "Sequence[c]", "ys", "Sequence[fac[b, a]]"},
+                {"xs", "Sequence[fac[c]]", "ys", "Sequence[a, b]"},
+                {"xs", "Sequence[fac[c]]", "ys", "Sequence[fac[a], b]"},
+                {"xs", "Sequence[fac[c]]", "ys", "Sequence[a, fac[b]]"},
+                {"xs", "Sequence[fac[c]]", "ys", "Sequence[fac[a], fac[b]]"},
+                {"xs", "Sequence[fac[c]]", "ys", "Sequence[fac[a, b]]"},
+                {"xs", "Sequence[fac[c]]", "ys", "Sequence[b, a]"},
+                {"xs", "Sequence[fac[c]]", "ys", "Sequence[fac[b], a]"},
+                {"xs", "Sequence[fac[c]]", "ys", "Sequence[b, fac[a]]"},
+                {"xs", "Sequence[fac[c]]", "ys", "Sequence[fac[b], fac[a]]"},
+                {"xs", "Sequence[fac[c]]", "ys", "Sequence[fac[b, a]]"},
+
+                // AB C
+                {"xs", "Sequence[a, b]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[a, b]", "ys", "Sequence[fac[c]]"},
+                {"xs", "Sequence[fac[a], b]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[fac[a], b]", "ys", "Sequence[fac[c]]"},
+                {"xs", "Sequence[a, fac[b]]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[a, fac[b]]", "ys", "Sequence[fac[c]]"},
+                {"xs", "Sequence[fac[a], fac[b]]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[fac[a], fac[b]]", "ys", "Sequence[fac[c]]"},
+                {"xs", "Sequence[fac[a, b]]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[fac[a, b]]", "ys", "Sequence[fac[c]]"},
+                {"xs", "Sequence[b, a]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[b, a]", "ys", "Sequence[fac[c]]"},
+                {"xs", "Sequence[fac[b], a]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[fac[b], a]", "ys", "Sequence[fac[c]]"},
+                {"xs", "Sequence[b, fac[a]]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[b, fac[a]]", "ys", "Sequence[fac[c]]"},
+                {"xs", "Sequence[fac[b], fac[a]]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[fac[b], fac[a]]", "ys", "Sequence[fac[c]]"},
+                {"xs", "Sequence[fac[b, a]]", "ys", "Sequence[c]"},
+                {"xs", "Sequence[fac[b, a]]", "ys", "Sequence[fac[c]]"},
+
+                // AC B
+                {"xs", "Sequence[a, c]", "ys", "Sequence[b]"},
+                {"xs", "Sequence[a, c]", "ys", "Sequence[fac[b]]"},
+                {"xs", "Sequence[fac[a], c]", "ys", "Sequence[b]"},
+                {"xs", "Sequence[fac[a], c]", "ys", "Sequence[fac[b]]"},
+                {"xs", "Sequence[a, fac[c]]", "ys", "Sequence[b]"},
+                {"xs", "Sequence[a, fac[c]]", "ys", "Sequence[fac[b]]"},
+                {"xs", "Sequence[fac[a], fac[c]]", "ys", "Sequence[b]"},
+                {"xs", "Sequence[fac[a], fac[c]]", "ys", "Sequence[fac[b]]"},
+                {"xs", "Sequence[fac[a, c]]", "ys", "Sequence[b]"},
+                {"xs", "Sequence[fac[a, c]]", "ys", "Sequence[fac[b]]"},
+                {"xs", "Sequence[c, a]", "ys", "Sequence[b]"},
+                {"xs", "Sequence[c, a]", "ys", "Sequence[fac[b]]"},
+                {"xs", "Sequence[fac[c], a]", "ys", "Sequence[b]"},
+                {"xs", "Sequence[fac[c], a]", "ys", "Sequence[fac[b]]"},
+                {"xs", "Sequence[c, fac[a]]", "ys", "Sequence[b]"},
+                {"xs", "Sequence[c, fac[a]]", "ys", "Sequence[fac[b]]"},
+                {"xs", "Sequence[fac[c], fac[a]]", "ys", "Sequence[b]"},
+                {"xs", "Sequence[fac[c], fac[a]]", "ys", "Sequence[fac[b]]"},
+                {"xs", "Sequence[fac[c, a]]", "ys", "Sequence[b]"},
+                {"xs", "Sequence[fac[c, a]]", "ys", "Sequence[fac[b]]"},
+
+                // BC A
+                {"xs", "Sequence[b, c]", "ys", "Sequence[a]"},
+                {"xs", "Sequence[b, c]", "ys", "Sequence[fac[a]]"},
+                {"xs", "Sequence[fac[b], c]", "ys", "Sequence[a]"},
+                {"xs", "Sequence[fac[b], c]", "ys", "Sequence[fac[a]]"},
+                {"xs", "Sequence[b, fac[c]]", "ys", "Sequence[a]"},
+                {"xs", "Sequence[b, fac[c]]", "ys", "Sequence[fac[a]]"},
+                {"xs", "Sequence[fac[b], fac[c]]", "ys", "Sequence[a]"},
+                {"xs", "Sequence[fac[b], fac[c]]", "ys", "Sequence[fac[a]]"},
+                {"xs", "Sequence[fac[b, c]]", "ys", "Sequence[a]"},
+                {"xs", "Sequence[fac[b, c]]", "ys", "Sequence[fac[a]]"},
+                {"xs", "Sequence[c, b]", "ys", "Sequence[a]"},
+                {"xs", "Sequence[c, b]", "ys", "Sequence[fac[a]]"},
+                {"xs", "Sequence[fac[c], b]", "ys", "Sequence[a]"},
+                {"xs", "Sequence[fac[c], b]", "ys", "Sequence[fac[a]]"},
+                {"xs", "Sequence[c, fac[b]]", "ys", "Sequence[a]"},
+                {"xs", "Sequence[c, fac[b]]", "ys", "Sequence[fac[a]]"},
+                {"xs", "Sequence[fac[c], fac[b]]", "ys", "Sequence[a]"},
+                {"xs", "Sequence[fac[c], fac[b]]", "ys", "Sequence[fac[a]]"},
+                {"xs", "Sequence[fac[c, b]]", "ys", "Sequence[a]"},
+                {"xs", "Sequence[fac[c, b]]", "ys", "Sequence[fac[a]]"},
             ]
         );
     }

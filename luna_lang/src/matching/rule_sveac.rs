@@ -1,27 +1,24 @@
-use crate::matching::function_application::{AFACGenerator, AFAGenerator, FunctionApplicationGenerator};
+use crate::matching::function_application::{AFACGenerator, FunctionApplicationGenerator};
+use crate::matching::rule_svec::next_subset;
 use crate::{
     Expr, MatchEquation, MatchGenerator, MatchResult, MatchResultList, MatchRule, Normal,
     Substitution, Symbol, parse_any_sequence_variable,
 };
 
-pub type RuleSVEA = RuleSVE<AFAGenerator>;
-pub type RuleSVEAC = RuleSVE<AFACGenerator>;
-
-pub(crate) struct RuleSVE<T>
-where
-    T: FunctionApplicationGenerator,
-{
+pub(crate) struct RuleSVEAC {
     pattern: Normal,
     ground: Normal,
     variable: Option<Symbol>,
-    ground_sequence: Vec<Expr>,
-    afa_generator: Option<Box<T>>,
+
+    /// Bit positions indicate which subset of the ground's arguments are currently being matched
+    /// against.
+    subset: u32,
+
+    complement: Vec<Expr>,
+    afa_generator: Option<Box<AFACGenerator>>,
 }
 
-impl<T> RuleSVE<T>
-where
-    T: FunctionApplicationGenerator,
-{
+impl RuleSVEAC {
     fn make_next(&self, ordered_sequence: Vec<Expr>) -> MatchResultList {
         let result_equation = MatchResult::MatchEquation(MatchEquation {
             pattern: Expr::from(Normal::new(
@@ -30,7 +27,7 @@ where
             )),
             ground: Expr::from(Normal::new(
                 self.ground.head().clone(),
-                &self.ground.elements()[self.ground_sequence.len()..],
+                self.complement.clone(),
             )),
         });
 
@@ -47,10 +44,7 @@ where
     }
 }
 
-impl<T> MatchRule for RuleSVE<T>
-where
-    T: FunctionApplicationGenerator,
-{
+impl MatchRule for RuleSVEAC {
     fn try_rule(match_equation: &MatchEquation) -> Option<Self> {
         if let (Some(p), Some(g)) = (
             match_equation.pattern.try_normal(),
@@ -64,11 +58,15 @@ where
                         pattern: p.clone(),
                         ground: g.clone(),
                         variable: variable.cloned(),
-                        ground_sequence: Vec::new(),
+                        subset: 0,
+                        complement: Vec::with_capacity(g.len()),
                         afa_generator: if matches_empty {
                             None
                         } else {
-                            Some(Box::new(T::new(Normal::new(g.head().clone(), vec![]))))
+                            Some(Box::new(AFACGenerator::new(Normal::new(
+                                g.head().clone(),
+                                vec![],
+                            ))))
                         },
                     });
                 }
@@ -79,10 +77,7 @@ where
     }
 }
 
-impl<T> MatchGenerator for RuleSVE<T>
-where
-    T: FunctionApplicationGenerator,
-{
+impl MatchGenerator for RuleSVEAC {
     fn match_equation(&self) -> MatchEquation {
         MatchEquation {
             pattern: Expr::from(self.pattern.clone()),
@@ -91,16 +86,16 @@ where
     }
 }
 
-impl<T> Iterator for RuleSVE<T>
-where
-    T: FunctionApplicationGenerator,
-{
+impl Iterator for RuleSVEAC {
     type Item = MatchResultList;
 
     fn next(&mut self) -> Option<Self::Item> {
         match &mut self.afa_generator {
             None => {
-                self.afa_generator = Some(Box::new(T::new(Normal::new(
+                self.complement.clear();
+                self.complement.extend_from_slice(self.ground.elements());
+
+                self.afa_generator = Some(Box::new(AFACGenerator::new(Normal::new(
                     self.ground.head().clone(),
                     vec![],
                 ))));
@@ -111,21 +106,32 @@ where
             Some(afa_generator) => {
                 let ordered_sequence = match afa_generator.next() {
                     None => {
-                        if let Some(next_element) = self.ground.part(self.ground_sequence.len()) {
-                            self.ground_sequence.push(next_element.clone());
+                        if let Some(next_subset) =
+                            next_subset(self.ground.len() as u32, self.subset)
+                        {
+                            self.subset = next_subset;
+
+                            let mut subset = Vec::with_capacity(self.subset.count_ones() as usize);
+                            self.complement.clear();
+
+                            for (k, c) in self.ground.elements().iter().enumerate() {
+                                if ((1 << k) as u32 & self.subset) != 0 {
+                                    subset.push(c.clone());
+                                } else {
+                                    self.complement.push(c.clone());
+                                }
+                            }
+
+                            let mut new_afa_generator =
+                                AFACGenerator::new(Normal::new(self.ground.head().clone(), subset));
+
+                            let next_result = new_afa_generator.next().unwrap();
+                            self.afa_generator = Some(Box::new(new_afa_generator));
+
+                            next_result
                         } else {
                             return None;
                         }
-
-                        let mut new_afa_generator = T::new(Normal::new(
-                            self.ground.head().clone(),
-                            self.ground_sequence.clone(),
-                        ));
-
-                        let next_result = new_afa_generator.next().unwrap();
-                        self.afa_generator = Some(Box::new(new_afa_generator));
-
-                        next_result
                     }
 
                     Some(next_result) => next_result,
