@@ -1,6 +1,7 @@
 mod function_application;
 mod matcher;
-mod permute;
+mod permutations;
+mod subsets;
 mod rule_dc;
 mod rule_dnc;
 mod rule_fve;

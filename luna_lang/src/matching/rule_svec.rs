@@ -1,8 +1,9 @@
-use crate::matching::permute::PermutationGenerator32;
+use crate::matching::permutations::PermutationGenerator32;
 use crate::{
     Expr, MatchEquation, MatchGenerator, MatchResult, MatchResultList, MatchRule, Normal,
     Substitution, Symbol, parse_any_sequence_variable,
 };
+use crate::matching::subsets::next_subset;
 
 /// Sequence variable elimination under a commutative head.
 ///
@@ -21,6 +22,7 @@ pub(crate) struct RuleSVEC {
     /// against.
     subset: u32,
 
+    /// Generator for all permutations of the current subset of elements.
     permutations: PermutationGenerator32,
 }
 
@@ -137,26 +139,4 @@ impl Iterator for RuleSVEC {
 
         Some(vec![match_equation])
     }
-}
-
-pub(crate) fn next_subset(n: u32, subset: u32) -> Option<u32> {
-    let max = 1 << n;
-
-    if subset == 0 {
-        return if n != 0 { Some(1) } else { None };
-    }
-
-    let c = subset & (!subset + 1);
-    let r = subset + c;
-    let next = ((r ^ subset) >> 2) / c | r;
-    if next < max {
-        return Some(next);
-    }
-
-    let bits = subset.count_ones();
-    if bits < n {
-        return Some((1 << (bits + 1)) - 1);
-    }
-
-    None
 }

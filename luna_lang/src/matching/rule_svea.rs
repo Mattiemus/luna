@@ -4,11 +4,24 @@ use crate::{
     Substitution, Symbol, parse_any_sequence_variable,
 };
 
+/// Sequence variable elimination under an associative head.
+///
+/// Matches a pattern `f[x__, ...]` or `f[x___, ...]` against a value `g[...]` where `f` is an
+/// associative function.
+///
+/// Assumptions:
+/// - `f` is an associative function.
+/// - `f` and `g` are equal.
 pub(crate) struct RuleSVEA {
     pattern: Normal,
     ground: Normal,
     variable: Option<Symbol>,
+
+    /// Holds the terms of the ground that we have attempted to match against so far.
     ground_sequence: Vec<Expr>,
+
+    /// Generator to produce associative function applications.
+    /// This being `None` indicates we still need to produce an empty sequence.
     afa_generator: Option<Box<AFAGenerator>>,
 }
 
@@ -84,6 +97,7 @@ impl Iterator for RuleSVEA {
 
     fn next(&mut self) -> Option<Self::Item> {
         match &mut self.afa_generator {
+            // Current generator being `None` is the signal we need to produce an empty sequence.
             None => {
                 self.afa_generator = Some(Box::new(AFAGenerator::new(Normal::new(
                     self.ground.head().clone(),
@@ -93,8 +107,13 @@ impl Iterator for RuleSVEA {
                 Some(self.make_next(Vec::new()))
             }
 
+            // Otherwise generate the next result
             Some(afa_generator) => {
+                // Determine the next sequence
                 let ordered_sequence = match afa_generator.next() {
+                    // There is no next valid result from the AFA generator.
+                    // Copy the next element from the `ground` expression into the active ground
+                    // sequence, and use that as the basis for a new AFA generator.
                     None => {
                         if let Some(next_element) = self.ground.part(self.ground_sequence.len()) {
                             self.ground_sequence.push(next_element.clone());
@@ -113,9 +132,11 @@ impl Iterator for RuleSVEA {
                         next_result
                     }
 
+                    // Current AFA generator is still producing values.
                     Some(next_result) => next_result,
                 };
 
+                // Transform the sequence into a result.
                 Some(self.make_next(ordered_sequence))
             }
         }

@@ -9,7 +9,7 @@ use crate::{
 /// The value of `x` must not be a sequence variable.
 ///
 /// Assumptions:
-/// - `f` is a commutative function.
+/// - `f` is a commutative or associative-commutative function.
 /// - `f` and `g` are equal.
 pub(crate) struct RuleDC {
     pattern: Normal,
@@ -67,6 +67,8 @@ impl Iterator for RuleDC {
 
         // Match equation to attempt to match the rest of the function parameters, i.e. `f[...]`
         // and `g[...]`.
+        //
+        // Note this has remove `x` from `g[x, ...]`.
         let result_function_equation = MatchResult::MatchEquation(MatchEquation {
             pattern: Expr::from(Normal::new(
                 self.pattern.head().clone(),

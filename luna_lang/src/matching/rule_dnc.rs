@@ -9,7 +9,7 @@ use crate::{
 /// The value of `x` must not be a sequence variable.
 ///
 /// Assumptions:
-/// - `f` is a non-commutative function.
+/// - `f` is a free or associative (i.e. non-commutative) function.
 /// - `f` and `g` are equal.
 pub(crate) struct RuleDNC {
     pattern: Normal,

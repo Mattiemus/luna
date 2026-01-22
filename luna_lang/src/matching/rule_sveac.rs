@@ -1,10 +1,18 @@
 use crate::matching::function_application::{AFACGenerator, FunctionApplicationGenerator};
-use crate::matching::rule_svec::next_subset;
 use crate::{
     Expr, MatchEquation, MatchGenerator, MatchResult, MatchResultList, MatchRule, Normal,
     Substitution, Symbol, parse_any_sequence_variable,
 };
+use crate::matching::subsets::next_subset;
 
+/// Sequence variable elimination under an associative-commutative head.
+///
+/// Matches a pattern `f[x__, ...]` or `f[x___, ...]` against a value `g[...]` where `f` is an
+/// associative function.
+///
+/// Assumptions:
+/// - `f` is an associative-commutative function.
+/// - `f` and `g` are equal.
 pub(crate) struct RuleSVEAC {
     pattern: Normal,
     ground: Normal,
@@ -14,7 +22,11 @@ pub(crate) struct RuleSVEAC {
     /// against.
     subset: u32,
 
+    /// List of values that are not part of the current subset.
     complement: Vec<Expr>,
+
+    /// Generator to produce associative-commutative function applications.
+    /// This being `None` indicates we still need to produce an empty sequence.
     afa_generator: Option<Box<AFACGenerator>>,
 }
 

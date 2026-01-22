@@ -1,5 +1,5 @@
 use crate::matching::function_application::{AFAGenerator, FunctionApplicationGenerator};
-use crate::matching::permute::PermutationGenerator32;
+use crate::matching::permutations::PermutationGenerator32;
 use crate::{Expr, Normal};
 
 /// Associative-Commutative Function Application Generator

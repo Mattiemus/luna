@@ -1,7 +1,7 @@
 use crate::matching::function_application::FunctionApplicationGenerator;
-use crate::matching::rule_svec::next_subset;
 use crate::{Expr, Normal};
 use std::cmp::min;
+use crate::matching::subsets::next_subset;
 
 /// Associative Function Application Generator.
 pub struct AFAGenerator {
