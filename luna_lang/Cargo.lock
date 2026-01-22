@@ -27,12 +27,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "74d4d4c1638c50c8ba9dbf54c231fb1c76bfce07fc46a6ec2fc2932f8a25c688"
 
 [[package]]
-name = "bit-vec"
-version = "0.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e764a1d40d510daf35e07be9eb06e75770908c27d411ee6c92109c9840eaaf7"
-
-[[package]]
 name = "bitflags"
 version = "2.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -92,7 +86,6 @@ name = "luna_lang"
 version = "0.1.0"
 dependencies = [
  "bit-index",
- "bit-vec",
  "once_cell",
  "rug",
  "ustr",
