@@ -26,6 +26,30 @@ pub(crate) struct RuleSVEA {
 }
 
 impl RuleSVEA {
+    pub(crate) fn new(
+        pattern: Normal,
+        ground: Normal,
+        variable: Option<Symbol>,
+        matches_empty: bool,
+    ) -> Self {
+        let afa_generator = if matches_empty {
+            None
+        } else {
+            Some(Box::new(AFAGenerator::new(Normal::new(
+                ground.head().clone(),
+                vec![],
+            ))))
+        };
+
+        Self {
+            pattern,
+            ground,
+            variable,
+            ground_sequence: Vec::new(),
+            afa_generator,
+        }
+    }
+
     fn make_next(&self, ordered_sequence: Vec<Expr>) -> MatchResultList {
         // Attempt to continue to match `f[...]` against `g[...]`.
         let result_equation = MatchResult::MatchEquation(MatchEquation {
@@ -55,33 +79,20 @@ impl RuleSVEA {
 
 impl MatchRule for RuleSVEA {
     fn try_rule(match_equation: &MatchEquation) -> Option<Self> {
-        if let (Some(p), Some(g)) = (
-            match_equation.pattern.try_normal(),
-            match_equation.ground.try_normal(),
-        ) {
-            if let Some(p0) = p.part(0) {
-                if let Some((matches_empty, variable, _)) = parse_any_sequence_variable(p0) {
-                    // TODO: Evaluate constraints for `BlankSequence[h]` and `Pattern[_, BlankSequence[h]]`.
+        let p = match_equation.pattern.try_normal()?;
+        let g = match_equation.ground.try_normal()?;
 
-                    return Some(Self {
-                        pattern: p.clone(),
-                        ground: g.clone(),
-                        variable: variable.cloned(),
-                        ground_sequence: Vec::new(),
-                        afa_generator: if matches_empty {
-                            None
-                        } else {
-                            Some(Box::new(AFAGenerator::new(Normal::new(
-                                g.head().clone(),
-                                vec![],
-                            ))))
-                        },
-                    });
-                }
-            }
-        }
+        let p0 = p.part(0)?;
+        let (matches_empty, variable, _) = parse_any_sequence_variable(p0)?;
 
-        None
+        // TODO: Evaluate constraints for `BlankSequence[h]` and `Pattern[_, BlankSequence[h]]`.
+
+        Some(Self::new(
+            p.clone(),
+            g.clone(),
+            variable.cloned(),
+            matches_empty,
+        ))
     }
 }
 

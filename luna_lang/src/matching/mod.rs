@@ -4,6 +4,8 @@ mod permutations;
 mod rule_dc;
 mod rule_dnc;
 mod rule_fve;
+mod rule_fvea;
+mod rule_ivea;
 mod rule_svea;
 mod rule_sveac;
 mod rule_svec;

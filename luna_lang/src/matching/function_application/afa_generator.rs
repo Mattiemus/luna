@@ -16,22 +16,15 @@ pub struct AFAGenerator {
 
 impl FunctionApplicationGenerator for AFAGenerator {
     fn new(function: Normal) -> Self {
-        if function.is_empty() {
-            return Self {
-                function,
-                exhausted: true,
-                singleton_state: Subset::empty(0),
-                application_state: Subset::empty(0),
-            };
-        }
-
-        let initial_application_state = Subset::empty(function.len() - 1);
-
         Self {
-            function,
-            exhausted: false,
+            function: function.clone(),
+            exhausted: function.is_empty(),
             singleton_state: Subset::empty(0),
-            application_state: initial_application_state,
+            application_state: Subset::empty(if function.is_empty() {
+                0
+            } else {
+                function.len() - 1
+            }),
         }
     }
 }
@@ -51,7 +44,7 @@ impl Iterator for AFAGenerator {
 
         for position in 1..=self.function.len() {
             if position == self.function.len() || !self.application_state.get(position - 1) {
-                if position - last_boundary_position > 1 {
+                if position > last_boundary_position + 1 {
                     let new_function = Expr::from(Normal::new(
                         self.function.head().clone(),
                         &self.function.elements()[last_boundary_position..position],

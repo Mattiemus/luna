@@ -26,10 +26,37 @@ pub(crate) struct RuleSVEAC {
 
     /// Generator to produce associative-commutative function applications.
     /// This being `None` indicates we still need to produce an empty sequence.
-    afa_generator: Option<Box<AFACGenerator>>,
+    afac_generator: Option<Box<AFACGenerator>>,
 }
 
 impl RuleSVEAC {
+    pub(crate) fn new(
+        pattern: Normal,
+        ground: Normal,
+        variable: Option<Symbol>,
+        matches_empty: bool,
+    ) -> Self {
+        let subset = Subset::empty(ground.len());
+
+        let afac_generator = if matches_empty {
+            None
+        } else {
+            Some(Box::new(AFACGenerator::new(Normal::new(
+                ground.head().clone(),
+                vec![],
+            ))))
+        };
+
+        Self {
+            pattern,
+            ground,
+            variable,
+            subset,
+            complement: vec![],
+            afac_generator,
+        }
+    }
+
     fn make_next(&self, ordered_sequence: Vec<Expr>) -> MatchResultList {
         // Attempt to continue to match `f[...]` against `g[...]`.
         let result_equation = MatchResult::MatchEquation(MatchEquation {
@@ -59,34 +86,20 @@ impl RuleSVEAC {
 
 impl MatchRule for RuleSVEAC {
     fn try_rule(match_equation: &MatchEquation) -> Option<Self> {
-        if let (Some(p), Some(g)) = (
-            match_equation.pattern.try_normal(),
-            match_equation.ground.try_normal(),
-        ) {
-            if let Some(p0) = p.part(0) {
-                if let Some((matches_empty, variable, _)) = parse_any_sequence_variable(p0) {
-                    // TODO: Evaluate constraints for `BlankSequence[h]` and `Pattern[_, BlankSequence[h]]`.
+        let p = match_equation.pattern.try_normal()?;
+        let g = match_equation.ground.try_normal()?;
 
-                    return Some(Self {
-                        pattern: p.clone(),
-                        ground: g.clone(),
-                        variable: variable.cloned(),
-                        subset: Subset::empty(g.len()),
-                        complement: Vec::with_capacity(g.len()),
-                        afa_generator: if matches_empty {
-                            None
-                        } else {
-                            Some(Box::new(AFACGenerator::new(Normal::new(
-                                g.head().clone(),
-                                vec![],
-                            ))))
-                        },
-                    });
-                }
-            }
-        }
+        let p0 = p.part(0)?;
+        let (matches_empty, variable, _) = parse_any_sequence_variable(p0)?;
 
-        None
+        // TODO: Evaluate constraints for `BlankSequence[h]` and `Pattern[_, BlankSequence[h]]`.
+
+        Some(Self::new(
+            p.clone(),
+            g.clone(),
+            variable.cloned(),
+            matches_empty,
+        ))
     }
 }
 
@@ -103,12 +116,12 @@ impl Iterator for RuleSVEAC {
     type Item = MatchResultList;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match &mut self.afa_generator {
+        match &mut self.afac_generator {
             // Current generator being `None` is the signal we need to produce an empty sequence.
             None => {
                 self.complement = self.ground.elements().to_vec();
 
-                self.afa_generator = Some(Box::new(AFACGenerator::new(Normal::new(
+                self.afac_generator = Some(Box::new(AFACGenerator::new(Normal::new(
                     self.ground.head().clone(),
                     vec![],
                 ))));
@@ -117,34 +130,32 @@ impl Iterator for RuleSVEAC {
             }
 
             // Otherwise generate the next result.
-            Some(afa_generator) => {
+            Some(afac_generator) => {
                 // Determine the next sequence.
-                let ordered_sequence = match afa_generator.next() {
-                    // There is no next valid result from the AFA generator.
-                    // Determine the next subset of elements from `g` to use and construct a new afa
-                    // generator.
+                let ordered_sequence = match afac_generator.next() {
+                    // There is no next valid result from the AFAC generator.
+                    // Determine the next subset of elements from `g` to use and construct a new
+                    // AFAC generator.
                     None => {
                         // Determine the next subset.
                         self.subset = self.subset.next()?;
 
                         // Extract the subset and complement from the current subset
                         let (subset, complement) = self.subset.extract(self.ground.elements());
-
-                        // Store the complement
                         self.complement = complement;
 
-                        // Use the subset to build a new AFA generator.
-                        let mut new_afa_generator =
+                        // Use the subset to build a new AFAC generator.
+                        let mut new_afac_generator =
                             AFACGenerator::new(Normal::new(self.ground.head().clone(), subset));
 
-                        // Get the next result to be returned and store the new AFA generator.
-                        let next_result = new_afa_generator.next().unwrap();
-                        self.afa_generator = Some(Box::new(new_afa_generator));
+                        // Get the next result to be returned and store the new AFAC generator.
+                        let next_result = new_afac_generator.next()?;
+                        self.afac_generator = Some(Box::new(new_afac_generator));
 
                         next_result
                     }
 
-                    // Current AFA generator is still producing values.
+                    // Current AFAC generator is still producing values.
                     Some(next_result) => next_result,
                 };
 

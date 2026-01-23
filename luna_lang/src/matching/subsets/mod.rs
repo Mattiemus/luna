@@ -1,5 +1,4 @@
 use crate::BigInteger;
-use rug::Complete;
 
 pub(crate) struct Subset {
     n: usize,
@@ -8,7 +7,10 @@ pub(crate) struct Subset {
 
 impl Subset {
     pub fn empty(n: usize) -> Self {
-        Self { n, value: BigInteger::ZERO }
+        Self {
+            n,
+            value: BigInteger::ZERO,
+        }
     }
 
     pub fn is_zero(&self) -> bool {
@@ -54,7 +56,7 @@ impl Subset {
         if self.is_zero() {
             return Some(Self {
                 n,
-                value: BigInteger::ONE.clone()
+                value: BigInteger::ONE.clone(),
             });
         }
 
@@ -64,17 +66,14 @@ impl Subset {
         let r: BigInteger = self.value.clone() + &c;
         let next = ((r.clone() ^ &self.value) >> 2) / &c | &r;
         if next < max {
-            return Some(Self {
-                n,
-                value: next
-            });
+            return Some(Self { n, value: next });
         }
 
         let bits = self.count_ones();
         if bits < n {
             return Some(Self {
                 n,
-                value: (BigInteger::ONE.clone() << (bits + 1)) - 1
+                value: (BigInteger::ONE.clone() << (bits + 1)) - 1,
             });
         }
 

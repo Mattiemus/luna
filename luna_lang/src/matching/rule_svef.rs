@@ -24,6 +24,23 @@ pub(crate) struct RuleSVEF {
 }
 
 impl RuleSVEF {
+    pub(crate) fn new(
+        pattern: Normal,
+        ground: Normal,
+        variable: Option<Symbol>,
+        matches_empty: bool,
+    ) -> Self {
+        Self {
+            pattern,
+            ground,
+            variable,
+            empty_produced: !matches_empty,
+            ground_sequence: vec![],
+        }
+    }
+}
+
+impl RuleSVEF {
     fn make_next(&self) -> MatchResultList {
         // Attempt to continue to match `f[...]` against `g[...]`.
         let new_match_equation = MatchResult::MatchEquation(MatchEquation {
@@ -56,26 +73,20 @@ impl RuleSVEF {
 
 impl MatchRule for RuleSVEF {
     fn try_rule(match_equation: &MatchEquation) -> Option<Self> {
-        if let (Some(p), Some(g)) = (
-            match_equation.pattern.try_normal(),
-            match_equation.ground.try_normal(),
-        ) {
-            if let Some(p0) = p.part(0) {
-                if let Some((matches_empty, variable, _)) = parse_any_sequence_variable(p0) {
-                    // TODO: Evaluate constraints for `BlankSequence[h]` and `Pattern[_, BlankSequence[h]]`.
+        let p = match_equation.pattern.try_normal()?;
+        let g = match_equation.ground.try_normal()?;
 
-                    return Some(Self {
-                        pattern: p.clone(),
-                        ground: g.clone(),
-                        variable: variable.cloned(),
-                        empty_produced: !matches_empty,
-                        ground_sequence: vec![],
-                    });
-                }
-            }
-        }
+        let p0 = p.part(0)?;
+        let (matches_empty, variable, _) = parse_any_sequence_variable(p0)?;
 
-        None
+        // TODO: Evaluate constraints for `BlankSequence[h]` and `Pattern[_, BlankSequence[h]]`.
+
+        Some(Self::new(
+            p.clone(),
+            g.clone(),
+            variable.cloned(),
+            matches_empty,
+        ))
     }
 }
 

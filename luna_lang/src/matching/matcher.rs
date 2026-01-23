@@ -3,6 +3,8 @@ use crate::matching::MatchRule;
 use crate::matching::rule_dc::RuleDC;
 use crate::matching::rule_dnc::RuleDNC;
 use crate::matching::rule_fve::RuleFVE;
+use crate::matching::rule_fvea::RuleFVEA;
+use crate::matching::rule_ivea::RuleIVEA;
 use crate::matching::rule_svea::RuleSVEA;
 use crate::matching::rule_sveac::RuleSVEAC;
 use crate::matching::rule_svec::RuleSVEC;
@@ -131,13 +133,17 @@ impl<'c> Matcher<'c> {
 
                     // Rules for associative functions.
                     (false, true) => {
+                        if let Some(rule) = RuleIVEA::try_rule(&match_equation) {
+                            return Some(Box::new(rule));
+                        }
+
                         if let Some(rule) = RuleSVEA::try_rule(&match_equation) {
                             return Some(Box::new(rule));
                         }
 
-                        // TODO
-                        // if let Some(rule) = RuleFVEA::try_rule(&match_equation) {
-                        // if let Some(rule) = RuleIVEA::try_rule(&match_equation) {
+                        if let Some(rule) = RuleFVEA::try_rule(&match_equation) {
+                            return Some(Box::new(rule));
+                        }
 
                         if let Some(rule) = RuleDNC::try_rule(&match_equation) {
                             return Some(Box::new(rule));
@@ -149,13 +155,13 @@ impl<'c> Matcher<'c> {
 
                     // Rules for associative-commutative symbols.
                     (true, true) => {
+                        // if let Some(rule) = RuleIVEAC::try_rule(&match_equation) {
+
                         if let Some(rule) = RuleSVEAC::try_rule(&match_equation) {
                             return Some(Box::new(rule));
                         }
 
-                        // TODO
                         // if let Some(rule) = RuleFVEAC::try_rule(&match_equation) {
-                        // if let Some(rule) = RuleIVEAC::try_rule(&match_equation) {
 
                         if let Some(rule) = RuleDC::try_rule(&match_equation) {
                             return Some(Box::new(rule));
@@ -812,6 +818,63 @@ mod tests {
         matcher_test!(blank_null_seq_empty, "fa[___]", "fa[]", [[]]);
         matcher_test!(exact_match, "fa[a, b, c]", "fa[a, b, c]", [[]]);
 
+        // Single named blank variables
+        matcher_test!(
+            named_blank_1,
+            "fa[x_]",
+            "fa[a]",
+            [[("x", "a")], [("x", "fa[a]")],]
+        );
+        matcher_test!(named_blank_2, "fa[x_]", "fa[a, b]", [[("x", "fa[a, b]")]]);
+        matcher_test!(
+            named_blank_3,
+            "fa[x_]",
+            "fa[a, b, c]",
+            [[("x", "fa[a, b, c]")]]
+        );
+        matcher_test!(
+            named_blank_plus_symbol,
+            "fa[x_, c]",
+            "fa[a, b, c]",
+            [[("x", "fa[a, b]")]]
+        );
+
+        // Two named blank variables
+        matcher_test!(two_named_blanks_1, "fa[x_, y_]", "fa[a]", []);
+        matcher_test!(
+            two_named_blanks_2,
+            "fa[x_, y_]",
+            "fa[a, b]",
+            [
+                [("x", "a"), ("y", "b")],
+                [("x", "a"), ("y", "fa[b]")],
+                [("x", "fa[a]"), ("y", "b")],
+                [("x", "fa[a]"), ("y", "fa[b]")],
+            ]
+        );
+        matcher_test!(
+            two_named_blanks_3,
+            "fa[x_, y_]",
+            "fa[a, b, c]",
+            [
+                [("x", "a"), ("y", "fa[b, c]")],
+                [("x", "fa[a]"), ("y", "fa[b, c]")],
+                [("x", "fa[a, b]"), ("y", "c")],
+                [("x", "fa[a, b]"), ("y", "fa[c]")],
+            ]
+        );
+        matcher_test!(
+            two_named_blanks_plus_symbol,
+            "fa[x_, y_, c]",
+            "fa[a, b, c]",
+            [
+                [("x", "a"), ("y", "b")],
+                [("x", "a"), ("y", "fa[b]")],
+                [("x", "fa[a]"), ("y", "b")],
+                [("x", "fa[a]"), ("y", "fa[b]")],
+            ]
+        );
+
         // Multiple blank sequence variables
         matcher_test!(
             multiple_blank_sequences,
@@ -899,6 +962,19 @@ mod tests {
                 [("xs", "Sequence[a, fa[b, c]]"), ("ys", "Sequence[]")],
                 [("xs", "Sequence[fa[a], fa[b, c]]"), ("ys", "Sequence[]")],
                 [("xs", "Sequence[fa[a, b, c]]"), ("ys", "Sequence[]")]
+            ]
+        );
+
+        // Function variable matching
+        matcher_test!(
+            function_variable,
+            "fa[f_[x_, y_], d]",
+            "fa[a, b, c, d]",
+            [
+                [("f", "fa"), ("x", "a"), ("y", "fa[b, c]")],
+                [("f", "fa"), ("x", "fa[a]"), ("y", "fa[b, c]")],
+                [("f", "fa"), ("x", "fa[a, b]"), ("y", "c")],
+                [("f", "fa"), ("x", "fa[a, b]"), ("y", "fa[c]")],
             ]
         );
     }

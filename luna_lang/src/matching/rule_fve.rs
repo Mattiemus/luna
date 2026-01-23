@@ -15,25 +15,27 @@ pub(crate) struct RuleFVE {
     exhausted: bool,
 }
 
+impl RuleFVE {
+    pub(crate) fn new(pattern: Normal, ground: Normal, variable: Option<Symbol>) -> Self {
+        Self {
+            pattern,
+            ground,
+            variable,
+            exhausted: false,
+        }
+    }
+}
+
 impl MatchRule for RuleFVE {
     fn try_rule(match_equation: &MatchEquation) -> Option<Self> {
-        if let (Some(p), Some(g)) = (
-            match_equation.pattern.try_normal(),
-            match_equation.ground.try_normal(),
-        ) {
-            if let Some((variable, _)) = parse_individual_variable(p.head()) {
-                // TODO: Evaluate constraints for `Blank[h]` and `Pattern[_, Blank[h]]`.
+        let p = match_equation.pattern.try_normal()?;
+        let g = match_equation.ground.try_normal()?;
 
-                return Some(Self {
-                    pattern: p.clone(),
-                    ground: g.clone(),
-                    variable: variable.cloned(),
-                    exhausted: false,
-                });
-            }
-        }
+        let (variable, _) = parse_individual_variable(p.head())?;
 
-        None
+        // TODO: Evaluate constraints for `Blank[h]` and `Pattern[_, Blank[h]]`.
+
+        Some(Self::new(p.clone(), g.clone(), variable.cloned()))
     }
 }
 

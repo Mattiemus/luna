@@ -8,13 +8,19 @@ pub(crate) struct RuleT {
     exhausted: bool,
 }
 
+impl RuleT {
+    pub(crate) fn new(match_equation: MatchEquation) -> Self {
+        Self {
+            match_equation,
+            exhausted: false,
+        }
+    }
+}
+
 impl MatchRule for RuleT {
     fn try_rule(match_equation: &MatchEquation) -> Option<Self> {
         if match_equation.pattern == match_equation.ground {
-            return Some(Self {
-                match_equation: match_equation.clone(),
-                exhausted: false,
-            });
+            return Some(Self::new(match_equation.clone()));
         }
 
         None

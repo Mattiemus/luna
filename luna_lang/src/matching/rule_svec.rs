@@ -28,29 +28,66 @@ pub(crate) struct RuleSVEC {
     permutations: PermutationGenerator32,
 }
 
-impl MatchRule for RuleSVEC {
-    fn try_rule(match_equation: &MatchEquation) -> Option<Self> {
-        if let (Some(p), Some(g)) = (
-            match_equation.pattern.try_normal(),
-            match_equation.ground.try_normal(),
-        ) {
-            if let Some(p0) = p.part(0) {
-                if let Some((matches_empty, variable, _)) = parse_any_sequence_variable(p0) {
-                    // TODO: Evaluate constraints for `BlankSequence[h]` and `Pattern[_, BlankSequence[h]]`.
+impl RuleSVEC {
+    pub(crate) fn new(
+        pattern: Normal,
+        ground: Normal,
+        variable: Option<Symbol>,
+        matches_empty: bool,
+    ) -> Self {
+        let subset = Subset::empty(ground.len());
+        let permutations = PermutationGenerator32::new(1);
 
-                    return Some(Self {
-                        pattern: p.clone(),
-                        ground: g.clone(),
-                        variable: variable.cloned(),
-                        empty_produced: !matches_empty,
-                        subset: Subset::empty(g.len()),
-                        permutations: PermutationGenerator32::new(1),
-                    });
-                }
-            }
+        Self {
+            pattern,
+            ground,
+            variable,
+            empty_produced: !matches_empty,
+            subset,
+            permutations,
+        }
+    }
+
+    fn make_next(&self, subset: Vec<Expr>, complement: Vec<Expr>) -> MatchResultList {
+        // Attempt to continue to match `f[...]` against `g[...]`.
+        let match_equation = MatchResult::MatchEquation(MatchEquation {
+            pattern: Expr::from(Normal::new(
+                self.pattern.head().clone(),
+                &self.pattern.elements()[1..],
+            )),
+            ground: Expr::from(Normal::new(self.ground.head().clone(), complement)),
+        });
+
+        // Create the substitution so long as the pattern was named.
+        if let Some(variable) = &self.variable {
+            let substitution = MatchResult::Substitution(Substitution {
+                variable: variable.clone(),
+                ground: Expr::from(Normal::new(Symbol::new("Sequence"), subset)),
+            });
+
+            return vec![match_equation, substitution];
         }
 
-        None
+        vec![match_equation]
+    }
+}
+
+impl MatchRule for RuleSVEC {
+    fn try_rule(match_equation: &MatchEquation) -> Option<Self> {
+        let p = match_equation.pattern.try_normal()?;
+        let g = match_equation.ground.try_normal()?;
+
+        let p0 = p.part(0)?;
+        let (matches_empty, variable, _) = parse_any_sequence_variable(p0)?;
+
+        // TODO: Evaluate constraints for `BlankSequence[h]` and `Pattern[_, BlankSequence[h]]`.
+
+        Some(Self::new(
+            p.clone(),
+            g.clone(),
+            variable.cloned(),
+            matches_empty,
+        ))
     }
 }
 
@@ -67,37 +104,16 @@ impl Iterator for RuleSVEC {
     type Item = MatchResultList;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // If the current subset is empty, and we have not yet produced the empty sequence we should
-        // do that now.
-        if self.subset.is_zero() && !self.empty_produced {
-            self.empty_produced = true;
-
-            // Attempt to continue to match `f[...]` against `g[...]`.
-            let match_equation = MatchResult::MatchEquation(MatchEquation {
-                pattern: Expr::from(Normal::new(
-                    self.pattern.head().clone(),
-                    &self.pattern.elements()[1..],
-                )),
-                ground: Expr::from(self.ground.clone()),
-            });
-
-            // Create the substitution so long as the pattern was named.
-            if let Some(variable) = &self.variable {
-                let substitution = MatchResult::Substitution(Substitution {
-                    variable: variable.clone(),
-                    ground: Expr::from(Normal::new(Symbol::new("Sequence"), vec![])),
-                });
-
-                return Some(vec![match_equation, substitution]);
-            }
-
-            return Some(vec![match_equation]);
-        }
-
         // If the current subset is empty we should try and increment it.
         // It is possible to bail early here if ground is `f[]` (i.e. it is empty).
-        if self.subset.is_zero() {
+        if self.subset.is_zero() && self.empty_produced {
             self.subset = self.subset.next()?;
+        }
+
+        // If wwe have not yet produced the empty sequence we should do that now.
+        if !self.empty_produced {
+            self.empty_produced = true;
+            return Some(self.make_next(vec![], self.ground.elements().to_vec()));
         }
 
         // Try and get the next permutation for `ground`s elements.
@@ -113,32 +129,14 @@ impl Iterator for RuleSVEC {
         // Extract the subset and complement from the current subset
         let (subset, complement) = self.subset.extract(self.ground.elements());
 
-        // Continue matching `f[...]` against the pattern `g[...]` where the contents of `g` is the
-        // complement of the current subset.
-        let match_equation = MatchResult::MatchEquation(MatchEquation {
-            pattern: Expr::from(Normal::new(
-                self.pattern.head().clone(),
-                &self.pattern.elements()[1..],
-            )),
-            ground: Expr::from(Normal::new(self.ground.head().clone(), complement)),
-        });
-
-        // The current subset ordered into the current permutation represents the substitution
-        // for `x`.
-        if let Some(variable) = &self.variable {
-            let substitution = MatchResult::Substitution(Substitution {
-                variable: variable.clone(),
-                ground: Expr::from(Normal::new(
-                    Symbol::new("Sequence"),
-                    permutation
-                        .map(|idx| subset[idx].clone())
-                        .collect::<Vec<_>>(),
-                )),
-            });
-
-            return Some(vec![match_equation, substitution]);
-        }
-
-        Some(vec![match_equation])
+        // Create the next result
+        Some(
+            self.make_next(
+                permutation
+                    .map(|idx| subset[idx].clone())
+                    .collect::<Vec<_>>(),
+                complement,
+            ),
+        )
     }
 }

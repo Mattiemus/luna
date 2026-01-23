@@ -15,36 +15,38 @@ pub(crate) struct RuleVE {
     exhausted: bool,
 }
 
+impl RuleVE {
+    pub(crate) fn new(match_equation: MatchEquation, variable: Option<Symbol>) -> Self {
+        Self {
+            match_equation,
+            variable,
+            exhausted: false,
+        }
+    }
+}
+
 impl MatchRule for RuleVE {
     fn try_rule(match_equation: &MatchEquation) -> Option<Self> {
         // Match `x_` against any value.
         if let Some((variable, _)) = parse_individual_variable(&match_equation.pattern) {
             // TODO: Evaluate constraints for `Blank[h]` and `Pattern[_, Blank[h]]`.
 
-            return Some(Self {
-                match_equation: match_equation.clone(),
-                variable: variable.cloned(),
-                exhausted: false,
-            });
+            return Some(Self::new(match_equation.clone(), variable.cloned()));
         }
 
         // Match `x__` and `x___` against sequence values.
         if let Some((matches_empty, variable, _)) =
             parse_any_sequence_variable(&match_equation.pattern)
         {
-            if let Some(gelements) = try_sequence(&match_equation.ground) {
-                if !matches_empty && gelements.is_empty() {
-                    return None;
-                }
+            let gelements = try_sequence(&match_equation.ground)?;
 
-                // TODO: Evaluate constraints for `BlankSequence[h]` and `Pattern[_, BlankSequence[h]]`.
-
-                return Some(Self {
-                    match_equation: match_equation.clone(),
-                    variable: variable.cloned(),
-                    exhausted: false,
-                });
+            if !matches_empty && gelements.is_empty() {
+                return None;
             }
+
+            // TODO: Evaluate constraints for `BlankSequence[h]` and `Pattern[_, BlankSequence[h]]`.
+
+            return Some(Self::new(match_equation.clone(), variable.cloned()));
         }
 
         None

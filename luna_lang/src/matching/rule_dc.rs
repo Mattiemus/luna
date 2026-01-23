@@ -19,26 +19,28 @@ pub(crate) struct RuleDC {
     term_idx: usize,
 }
 
+impl RuleDC {
+    pub(crate) fn new(pattern: Normal, ground: Normal) -> Self {
+        Self {
+            pattern,
+            ground,
+            term_idx: 0,
+        }
+    }
+}
+
 impl MatchRule for RuleDC {
     fn try_rule(match_equation: &MatchEquation) -> Option<Self> {
-        if let (Some(p), Some(g)) = (
-            match_equation.pattern.try_normal(),
-            match_equation.ground.try_normal(),
-        ) {
-            if let (Some(p0), Some(_)) = (p.part(0), g.part(0)) {
-                if is_any_sequence_variable(p0) {
-                    return None;
-                }
+        let p = match_equation.pattern.try_normal()?;
+        let g = match_equation.ground.try_normal()?;
 
-                return Some(Self {
-                    pattern: p.clone(),
-                    ground: g.clone(),
-                    term_idx: 0,
-                });
-            }
+        let (p0, _) = (p.part(0)?, g.part(0)?);
+
+        if is_any_sequence_variable(p0) {
+            return None;
         }
 
-        None
+        Some(Self::new(p.clone(), g.clone()))
     }
 }
 
