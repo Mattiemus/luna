@@ -1,9 +1,10 @@
 use crate::Symbol;
 use crate::matching::MatchRule;
-use crate::matching::rule_dc::RuleDC;
+use crate::matching::rule_dc::{RuleDC};
 use crate::matching::rule_dnc::RuleDNC;
 use crate::matching::rule_fve::RuleFVE;
 use crate::matching::rule_fvea::RuleFVEA;
+use crate::matching::rule_fveac::RuleFVEAC;
 use crate::matching::rule_ivea::RuleIVEA;
 use crate::matching::rule_svea::RuleSVEA;
 use crate::matching::rule_sveac::RuleSVEAC;
@@ -161,7 +162,9 @@ impl<'c> Matcher<'c> {
                             return Some(Box::new(rule));
                         }
 
-                        // if let Some(rule) = RuleFVEAC::try_rule(&match_equation) {
+                        if let Some(rule) = RuleFVEAC::try_rule(&match_equation) {
+                            return Some(Box::new(rule));
+                        }
 
                         if let Some(rule) = RuleDC::try_rule(&match_equation) {
                             return Some(Box::new(rule));
@@ -968,6 +971,20 @@ mod tests {
         // Function variable matching
         matcher_test!(
             function_variable,
+            "fa[f_[xs__], c]",
+            "fa[a, b, c]",
+            [
+                [("f", "fa"), ("xs", "Sequence[a, b]")],
+                [("f", "fa"), ("xs", "Sequence[fa[a], b]")],
+                [("f", "fa"), ("xs", "Sequence[a, fa[b]]")],
+                [("f", "fa"), ("xs", "Sequence[fa[a], fa[b]]")],
+                [("f", "fa"), ("xs", "Sequence[fa[a, b]]")],
+            ]
+        );
+
+        // Function variable matching with blanks
+        matcher_test!(
+            function_variable_with_blanks,
             "fa[f_[x_, y_], d]",
             "fa[a, b, c, d]",
             [
@@ -1530,6 +1547,25 @@ mod tests {
                 [("xs", "Sequence[c, fac[b, a]]"), ("ys", "Sequence[]")],
                 [("xs", "Sequence[fac[c], fac[b, a]]"), ("ys", "Sequence[]")],
                 [("xs", "Sequence[fac[c, b, a]]"), ("ys", "Sequence[]")],
+            ]
+        );
+
+        // Function variable matching
+        matcher_test!(
+            function_variable,
+            "fac[f_[xs__], c]",
+            "fac[a, b, c]",
+            [
+                [("f", "fac"), ("xs", "Sequence[a, b]")],
+                [("f", "fac"), ("xs", "Sequence[fac[a], b]")],
+                [("f", "fac"), ("xs", "Sequence[a, fac[b]]")],
+                [("f", "fac"), ("xs", "Sequence[fac[a], fac[b]]")],
+                [("f", "fac"), ("xs", "Sequence[fac[a, b]]")],
+                [("f", "fac"), ("xs", "Sequence[b, a]")],
+                [("f", "fac"), ("xs", "Sequence[fac[b], a]")],
+                [("f", "fac"), ("xs", "Sequence[b, fac[a]]")],
+                [("f", "fac"), ("xs", "Sequence[fac[b], fac[a]]")],
+                [("f", "fac"), ("xs", "Sequence[fac[b, a]]")],
             ]
         );
     }

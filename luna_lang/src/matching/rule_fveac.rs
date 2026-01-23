@@ -1,47 +1,47 @@
-use crate::matching::rule_dnc::RuleDNC;
 use crate::{
     Expr, MatchEquation, MatchGenerator, MatchResult, MatchResultList, MatchRule, Normal,
     Substitution, Symbol, parse_individual_variable,
 };
+use crate::matching::rule_dc::RuleDC;
 
-/// Function variable elimination under an associative head.
+/// Function variable elimination under an associative-commutative head.
 ///
-/// Matches a pattern `f[f_[...], ...]` against a value `g[...]` where `f` is an associative
-/// function.
+/// Matches a pattern `f[f_[...], ...]` against a value `g[...]` where `f` is an
+/// associative-commutative function.
 ///
 /// Assumptions:
-/// - `f` is an associative function.
+/// - `f` is an associative-commutative function.
 /// - `f` and `g` are equal.
-pub struct RuleFVEA {
+pub struct RuleFVEAC {
     pattern: Normal,
     pattern_first: Normal,
     ground: Normal,
     variable: Option<Symbol>,
-    rule_dnc: RuleDNC,
+    rule_dc: RuleDC,
     exhausted: bool,
 }
 
-impl RuleFVEA {
+impl RuleFVEAC {
     pub(crate) fn new(
         pattern: Normal,
         pattern_first: Normal,
         ground: Normal,
         variable: Option<Symbol>,
     ) -> Self {
-        let rule_deca = RuleDNC::new(pattern.clone(), ground.clone());
+        let rule_dc = RuleDC::new(pattern.clone(), ground.clone());
 
         Self {
             pattern,
             pattern_first,
             ground,
             variable,
-            rule_dnc: rule_deca,
+            rule_dc,
             exhausted: false,
         }
     }
 }
 
-impl MatchRule for RuleFVEA {
+impl MatchRule for RuleFVEAC {
     fn try_rule(match_equation: &MatchEquation) -> Option<Self> {
         let p = match_equation.pattern.try_normal()?;
         let g = match_equation.ground.try_normal()?;
@@ -61,7 +61,7 @@ impl MatchRule for RuleFVEA {
     }
 }
 
-impl MatchGenerator for RuleFVEA {
+impl MatchGenerator for RuleFVEAC {
     fn match_equation(&self) -> MatchEquation {
         MatchEquation {
             pattern: Expr::from(self.pattern.clone()),
@@ -70,11 +70,11 @@ impl MatchGenerator for RuleFVEA {
     }
 }
 
-impl Iterator for RuleFVEA {
+impl Iterator for RuleFVEAC {
     type Item = MatchResultList;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(result) = self.rule_dnc.next() {
+        if let Some(result) = self.rule_dc.next() {
             return Some(result);
         }
 
