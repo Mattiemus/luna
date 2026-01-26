@@ -77,8 +77,8 @@ impl MatchRule for RuleSVEC {
         let p = match_equation.pattern.try_normal()?;
         let g = match_equation.ground.try_normal()?;
 
-        let p0 = p.part(0)?;
-        let (matches_empty, variable, _) = parse_any_sequence_variable(p0)?;
+        let p_elem0 = p.element(0)?;
+        let (matches_empty, variable, _) = parse_any_sequence_variable(p_elem0)?;
 
         // TODO: Evaluate constraints for `BlankSequence[h]` and `Pattern[_, BlankSequence[h]]`.
 
@@ -104,16 +104,16 @@ impl Iterator for RuleSVEC {
     type Item = MatchResultList;
 
     fn next(&mut self) -> Option<Self::Item> {
-        // If the current subset is empty we should try and increment it.
-        // It is possible to bail early here if ground is `f[]` (i.e. it is empty).
-        if self.subset.is_zero() && self.empty_produced {
-            self.subset = self.subset.next()?;
-        }
-
         // If wwe have not yet produced the empty sequence we should do that now.
         if !self.empty_produced {
             self.empty_produced = true;
             return Some(self.make_next(vec![], self.ground.elements().to_vec()));
+        }
+
+        // If the current subset is empty we should try and increment it.
+        // It is possible to bail early here if ground is `f[]` (i.e. it is empty).
+        if self.subset.is_zero() {
+            self.subset = self.subset.next()?;
         }
 
         // Try and get the next permutation for `ground`s elements.

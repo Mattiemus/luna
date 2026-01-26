@@ -40,7 +40,7 @@ impl Iterator for AFACGenerator {
                     let permuted_function = Normal::new(
                         self.function.head().clone(),
                         permutation
-                            .map(|n| self.function.element(n).clone())
+                            .map(|n| self.function.elements()[n].clone())
                             .collect::<Vec<_>>(),
                     );
 

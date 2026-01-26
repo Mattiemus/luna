@@ -1,47 +1,50 @@
-use crate::matching::rule_dnc::RuleDNC;
-use crate::matching::rule_svef::RuleSVEF;
+use crate::matching::rule_dc::RuleDC;
+use crate::matching::rule_svec::RuleSVEC;
 use crate::{
     Expr, MatchEquation, MatchGenerator, MatchResult, MatchResultList, MatchRule, Normal,
     Substitution, Symbol, parse_individual_variable, try_sequence,
 };
 
-/// Individual variable elimination under an associative head.
+/// Individual variable elimination under an associative-commutative head.
 ///
-/// Matches a pattern `f[x_, ...]` against a value `g[y, ...]` where `f` is an associative function.
+/// Matches a pattern `f[x_, ...]` against a value `g[y, ...]` where `f` is an
+/// associative-commutative function.
 ///
 /// For example `f[x_, ...]` and `g[a, b, c]` will result in the matches:
 ///     - `x` => `a`            (+ match equation for `f[...]` against `g[b, c]`)
 ///     - `x` => `f[a]`         (+ match equation for `f[...]` against `g[b, c]`)
+///     - `x` => `f[a]`         (+ match equation for `f[...]` against `g[c, b]`)
 ///     - `x` => `f[a, b]`      (+ match equation for `f[...]` against `g[c]`)
-///     - `x` => `f[a, b, c]`
+///     - `x` => `f[b, a]`      (+ match equation for `f[...]` against `g[c]`)
+///     - `x` => `f[a, b, c]`, `f[b, c, a]`, `f[c, b, a]`, ...
 ///
-/// Internally this makes use of `RuleSVEF` and `RuleDNC` to determine potential matches. This is
-/// due to the implementations of this and `RuleSVEF` being effectively identical, albeit with
+/// Internally this makes use of `RuleSVEC` and `RuleDC` to determine potential matches. This is
+/// due to the implementations of this and `RuleSVEC` being effectively identical, albeit with
 /// differing wrapping rules for the various possible `Sequence[...]` substitutions. Usage of
-/// `RuleDNC` facilitates matching of singleton values (i.e. `x` => `a` in the above example).
+/// `RuleDC` facilitates matching of singleton values (i.e. `x` => `a` in the above example).
 ///
 /// Assumptions:
-/// - `f` is an associative function.
+/// - `f` is an associative-commutative function.
 /// - `f` and `g` are equal.
-pub(crate) struct RuleIVEA {
+pub(crate) struct RuleIVEAC {
     pattern: Normal,
     ground: Normal,
-    rule_dnc: RuleDNC,
-    rule_svef: RuleSVEF,
+    rule_dc: RuleDC,
+    rule_svec: RuleSVEC,
 }
 
-impl RuleIVEA {
+impl RuleIVEAC {
     pub(crate) fn new(pattern: Normal, ground: Normal, variable: Option<Symbol>) -> Self {
         Self {
             pattern: pattern.clone(),
             ground: ground.clone(),
-            rule_dnc: RuleDNC::new(pattern.clone(), ground.clone()),
-            rule_svef: RuleSVEF::new(pattern.clone(), ground.clone(), variable.clone(), false),
+            rule_dc: RuleDC::new(pattern.clone(), ground.clone()),
+            rule_svec: RuleSVEC::new(pattern.clone(), ground.clone(), variable.clone(), false),
         }
     }
 }
 
-impl MatchRule for RuleIVEA {
+impl MatchRule for RuleIVEAC {
     fn try_rule(match_equation: &MatchEquation) -> Option<Self> {
         let p = match_equation.pattern.try_normal()?;
         let g = match_equation.ground.try_normal()?;
@@ -55,7 +58,7 @@ impl MatchRule for RuleIVEA {
     }
 }
 
-impl MatchGenerator for RuleIVEA {
+impl MatchGenerator for RuleIVEAC {
     fn match_equation(&self) -> MatchEquation {
         MatchEquation {
             pattern: Expr::from(self.pattern.clone()),
@@ -64,18 +67,18 @@ impl MatchGenerator for RuleIVEA {
     }
 }
 
-impl Iterator for RuleIVEA {
+impl Iterator for RuleIVEAC {
     type Item = MatchResultList;
 
     fn next(&mut self) -> Option<Self::Item> {
         // Attempt decomposition first.
         // This ensures we put the singleton results ahead of the function application results.
-        if let Some(result) = self.rule_dnc.next() {
+        if let Some(result) = self.rule_dc.next() {
             return Some(result);
         }
 
-        // Next attempt to get the next result from `RuleSVEF`.
-        let result = self.rule_svef.next()?;
+        // Next attempt to get the next result from `RuleSVEC`.
+        let result = self.rule_svec.next()?;
 
         // Transform the results list into a consuming iterator and transform substitutions
         // into function application(s) instead of sequence values.
@@ -84,7 +87,7 @@ impl Iterator for RuleIVEA {
             .map(|match_result| match match_result {
                 MatchResult::Substitution(Substitution { variable, ground }) => {
                     let sequence_elements = try_sequence(&ground)
-                        .expect("RuleSVEA should only produce Sequence[...] results");
+                        .expect("RuleSVEC should only produce Sequence[...] results");
 
                     MatchResult::Substitution(Substitution {
                         variable,

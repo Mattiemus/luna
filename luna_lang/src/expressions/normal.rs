@@ -2,10 +2,10 @@ use crate::Expr;
 use crate::Symbol;
 use std::fmt;
 use std::fmt::Formatter;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 
 /// Represents a normal expression of the form `f[...]`.
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Normal {
     head: Expr,
     elements: Box<[Expr]>,
@@ -27,8 +27,8 @@ impl Normal {
         &self.elements
     }
 
-    pub fn element(&self, idx: usize) -> &Expr {
-        &self.elements[idx]
+    pub fn element(&self, idx: usize) -> Option<&Expr> {
+        self.elements.get(idx)
     }
 
     pub fn len(&self) -> usize {
@@ -46,22 +46,8 @@ impl Normal {
         }
     }
 
-    pub fn part(&self, idx: usize) -> Option<&Expr> {
-        self.elements.get(idx)
-    }
-
     pub fn try_head_symbol(&self) -> Option<&Symbol> {
         self.head.try_symbol()
-    }
-}
-
-impl Hash for Normal {
-    fn hash<H: Hasher>(&self, hasher: &mut H) {
-        self.head.hash(hasher);
-
-        for elem in &self.elements {
-            elem.hash(hasher);
-        }
     }
 }
 

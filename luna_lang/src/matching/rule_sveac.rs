@@ -89,8 +89,8 @@ impl MatchRule for RuleSVEAC {
         let p = match_equation.pattern.try_normal()?;
         let g = match_equation.ground.try_normal()?;
 
-        let p0 = p.part(0)?;
-        let (matches_empty, variable, _) = parse_any_sequence_variable(p0)?;
+        let p_elem0 = p.element(0)?;
+        let (matches_empty, variable, _) = parse_any_sequence_variable(p_elem0)?;
 
         // TODO: Evaluate constraints for `BlankSequence[h]` and `Pattern[_, BlankSequence[h]]`.
 

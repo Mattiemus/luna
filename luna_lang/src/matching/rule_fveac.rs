@@ -1,8 +1,8 @@
+use crate::matching::rule_dc::RuleDC;
 use crate::{
     Expr, MatchEquation, MatchGenerator, MatchResult, MatchResultList, MatchRule, Normal,
     Substitution, Symbol, parse_individual_variable,
 };
-use crate::matching::rule_dc::RuleDC;
 
 /// Function variable elimination under an associative-commutative head.
 ///
@@ -46,15 +46,15 @@ impl MatchRule for RuleFVEAC {
         let p = match_equation.pattern.try_normal()?;
         let g = match_equation.ground.try_normal()?;
 
-        let (p0, _) = (p.part(0)?, g.part(0)?);
-        let p0_normal = p0.try_normal()?;
-        let (variable, _) = parse_individual_variable(p0_normal.head())?;
+        let (p_elem0, _) = (p.element(0)?, g.element(0)?);
+        let p_elem0_normal = p_elem0.try_normal()?;
+        let (variable, _) = parse_individual_variable(p_elem0_normal.head())?;
 
         // TODO: Evaluate constraints for `Blank[h]` and `Pattern[_, Blank[h]]`.
 
         Some(Self::new(
             p.clone(),
-            p0_normal.clone(),
+            p_elem0_normal.clone(),
             g.clone(),
             variable.cloned(),
         ))

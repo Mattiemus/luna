@@ -55,12 +55,12 @@ impl Iterator for AFAGenerator {
                     if self.singleton_state.get(singleton_count) {
                         let new_function = Expr::from(Normal::new(
                             self.function.head().clone(),
-                            [self.function.element(position - 1).clone()],
+                            [self.function.elements()[position - 1].clone()],
                         ));
 
                         result_sequence.push(new_function);
                     } else {
-                        result_sequence.push(self.function.element(position - 1).clone());
+                        result_sequence.push(self.function.elements()[position - 1].clone());
                     }
 
                     singleton_count += 1;

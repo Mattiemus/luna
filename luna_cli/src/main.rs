@@ -1,91 +1,82 @@
-use std::collections::btree_set::{BTreeSet, IntoIter};
+use luna_lang::{Context, evaluate, parse};
+use rustyline::error::ReadlineError;
+use rustyline::{DefaultEditor, Result as RLResult};
 
-enum UniquePermutations<T: Clone + PartialEq + Ord> {
-    Leaf {
-        elements: Option<Vec<T>>,
-    },
-    Stem {
-        elements: Vec<T>,
-        unique_elements: IntoIter<T>,
-        first_element: T,
-        inner: Box<Self>,
-    },
+struct Session {
+    context: Context,
 }
 
-impl<T: Clone + PartialEq + Ord> UniquePermutations<T> {
-    fn new(elements: Vec<T>) -> Self {
-        if elements.len() == 0 || elements.len() == 1 {
-            let elements = Some(elements);
-            return Self::Leaf { elements };
-        }
-
-        let mut unique_elements = elements
-            .clone()
-            .into_iter()
-            .collect::<BTreeSet<_>>()
-            .into_iter();
-
-        let (first_element, inner) = Self::next_level(&mut unique_elements, elements.clone())
-            .expect("must have at least one item");
-
-        Self::Stem {
-            elements,
-            unique_elements,
-            first_element,
-            inner,
+impl Session {
+    fn new() -> Self {
+        Self {
+            context: Context::new_global_context(),
         }
     }
 
-    fn next_level(
-        mut unique_elements: impl Iterator<Item = T>,
-        elements: Vec<T>,
-    ) -> Option<(T, Box<Self>)> {
-        let first_element = unique_elements.next()?;
-        let mut remaining_elements = elements;
+    fn process_input(&mut self, input: &str) -> Result<(), String> {
+        let result = parse(input);
 
-        if let Some(idx) = remaining_elements.iter().position(|i| i == &first_element) {
-            remaining_elements.remove(idx);
+        match result {
+            Ok(expr) => {
+                let result = evaluate(expr, &mut self.context);
+                println!();
+                println!("{}", result);
+                println!();
+                Ok(())
+            }
+
+            _ => Err("Failed to parse.\n".to_string()),
         }
-
-        let inner = Box::new(Self::new(remaining_elements));
-
-        Some((first_element, inner))
     }
 }
 
-impl<T: Clone + PartialEq + Ord> Iterator for UniquePermutations<T> {
-    type Item = Vec<T>;
+fn main() -> RLResult<()> {
+    println!("Luna! A language for scientific computing");
+    println!("v0.1.0");
+    println!();
 
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            Self::Leaf { elements } => elements.take(),
-            Self::Stem {
-                elements,
-                unique_elements,
-                first_element,
-                inner,
-            } => loop {
-                match inner.next() {
-                    Some(mut v) => {
-                        v.insert(0, first_element.clone());
-                        return Some(v);
-                    }
-                    None => {
-                        let (next_fe, next_i) =
-                            Self::next_level(&mut *unique_elements, elements.clone())?;
+    let mut session = Session::new();
 
-                        *first_element = next_fe;
-                        *inner = next_i;
+    // TODO: Add helper
+    let mut rl = DefaultEditor::new()?;
+
+    loop {
+        let readline = rl.readline(":> ");
+
+        match readline {
+            Ok(line) => {
+                _ = rl.add_history_entry(line.as_str());
+
+                match line.as_str() {
+                    "end" | "exit" => break,
+                    _ => {
+                        // No-op
                     }
                 }
-            },
+
+                match session.process_input(line.as_str()) {
+                    Ok(()) => {}
+                    Err(msg) => {
+                        println!("{}", msg);
+                    }
+                }
+            }
+
+            Err(ReadlineError::Interrupted) => {
+                println!("CTRL-C");
+                break;
+            }
+
+            Err(ReadlineError::Eof) => {
+                println!("CTRL-D");
+                break;
+            }
+
+            Err(err) => {
+                println!("Error: {:?}\n", err);
+            }
         }
     }
-}
 
-fn main() {
-    let items = vec![0, 0, 1, 2];
-    for perm in UniquePermutations::new(items) {
-        println!("{:?}", perm);
-    }
+    Ok(())
 }

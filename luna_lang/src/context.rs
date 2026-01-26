@@ -31,11 +31,12 @@ impl Context {
         context
     }
 
+    pub fn state_version(&self) -> usize {
+        self.state_version
+    }
+
     pub fn get_attributes(&self, symbol: &Symbol) -> Attributes {
-        match self.attributes.get(symbol) {
-            None => Attributes::empty(),
-            Some(attributes) => *attributes,
-        }
+        self.attributes.get(symbol).cloned().unwrap_or_default()
     }
 
     pub fn set_attributes(
@@ -62,69 +63,32 @@ impl Context {
             .or_insert_with(|| SymbolDefinition::new())
     }
 
-    pub fn set_own_value(&mut self, symbol: &Symbol, value: SymbolValue) -> Result<(), String> {
-        let attributes = self.get_attributes(symbol);
-        if attributes.read_only() {
-            return Err(format!("Symbol '{}' is read-only", symbol));
-        }
+    pub fn get_values(&self, symbol: &Symbol, value_type: ValueType) -> Option<&RewriteRuleSet> {
+        let definition = self.get_definition(symbol)?;
+        let rewrite_rules = definition.rules(value_type);
 
-        let definition = self.get_definition_mut(symbol);
-        if definition.own_values.contains(&value) {
-            return Ok(());
-        }
-
-        definition.own_values.push(value);
-        self.state_version += 1;
-
-        Ok(())
+        Some(rewrite_rules)
     }
 
-    pub fn set_up_value(&mut self, symbol: &Symbol, value: SymbolValue) -> Result<(), String> {
+    pub fn set_value(
+        &mut self,
+        symbol: &Symbol,
+        value_type: ValueType,
+        rewrite_rule: RewriteRule,
+    ) -> Result<(), String> {
         let attributes = self.get_attributes(symbol);
         if attributes.read_only() {
             return Err(format!("Symbol '{}' is read-only", symbol));
         }
 
         let definition = self.get_definition_mut(symbol);
-        if definition.up_values.contains(&value) {
+        let rewrite_rules = definition.rules_mut(value_type);
+
+        if rewrite_rules.has_rule(rewrite_rule.pattern(), rewrite_rule.condition()) {
             return Ok(());
         }
 
-        definition.up_values.push(value);
-        self.state_version += 1;
-
-        Ok(())
-    }
-
-    pub fn set_down_value(&mut self, symbol: &Symbol, value: SymbolValue) -> Result<(), String> {
-        let attributes = self.get_attributes(symbol);
-        if attributes.read_only() {
-            return Err(format!("Symbol '{}' is read-only", symbol));
-        }
-
-        let definition = self.get_definition_mut(symbol);
-        if definition.down_values.contains(&value) {
-            return Ok(());
-        }
-
-        definition.down_values.push(value);
-        self.state_version += 1;
-
-        Ok(())
-    }
-
-    pub fn set_sub_value(&mut self, symbol: &Symbol, value: SymbolValue) -> Result<(), String> {
-        let attributes = self.get_attributes(symbol);
-        if attributes.read_only() {
-            return Err(format!("Symbol '{}' is read-only", symbol));
-        }
-
-        let definition = self.get_definition_mut(symbol);
-        if definition.sub_values.contains(&value) {
-            return Ok(());
-        }
-
-        definition.sub_values.push(value);
+        rewrite_rules.push(rewrite_rule);
         self.state_version += 1;
 
         Ok(())
@@ -144,39 +108,67 @@ impl Context {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub enum ValueType {
+    OwnValue,
+    UpValue,
+    DownValue,
+    SubValue,
+}
+
 /// A `SymbolDefinition` contains all the transformation rules that apply to a given symbol.
 pub struct SymbolDefinition {
     /// OwnValues define how the symbol appearing alone should be evaluated.
     /// They have the form `x :> expr` or `x = expr`.
-    pub own_values: Vec<SymbolValue>,
+    pub own_values: RewriteRuleSet,
 
     /// UpValues define how M-expressions having the symbol as an argument should be evaluated.
     /// They typically have the form `f[pattern, g[pattern], pattern] :> expr`.
     /// UpValues are applied before DownValues.
-    pub up_values: Vec<SymbolValue>,
+    pub up_values: RewriteRuleSet,
 
     /// DownValues define how M-expressions having the symbol as their head should be evaluated.
     /// They typically have the form `f[pattern] :> expr`.
-    pub down_values: Vec<SymbolValue>,
+    pub down_values: RewriteRuleSet,
 
     /// SubValues define how M-expressions having an M-expression with the symbol as a head should be evaluated.
     /// They typically have the form `f[pat][pat] :> exp`.
-    pub sub_values: Vec<SymbolValue>,
+    pub sub_values: RewriteRuleSet,
 }
 
 impl SymbolDefinition {
     pub fn new() -> Self {
         Self {
-            own_values: Vec::new(),
-            up_values: Vec::new(),
-            down_values: Vec::new(),
-            sub_values: Vec::new(),
+            own_values: RewriteRuleSet::new(),
+            up_values: RewriteRuleSet::new(),
+            down_values: RewriteRuleSet::new(),
+            sub_values: RewriteRuleSet::new(),
+        }
+    }
+
+    pub fn rules(&self, value_type: ValueType) -> &RewriteRuleSet {
+        match value_type {
+            ValueType::OwnValue => &self.own_values,
+            ValueType::UpValue => &self.up_values,
+            ValueType::DownValue => &self.down_values,
+            ValueType::SubValue => &self.sub_values,
+        }
+    }
+
+    pub fn rules_mut(&mut self, value_type: ValueType) -> &mut RewriteRuleSet {
+        match value_type {
+            ValueType::OwnValue => &mut self.own_values,
+            ValueType::UpValue => &mut self.up_values,
+            ValueType::DownValue => &mut self.down_values,
+            ValueType::SubValue => &mut self.sub_values,
         }
     }
 }
 
-/// A `SymbolValue` is a wrapper used for storing the rule in a symbol table as an own/up/down/sub value.
-pub enum SymbolValue {
+/// A `RewriteRule` is used for storing the definition of an own/up/down/sub value within a symbol
+/// definition table.
+#[derive(Clone, Debug)]
+pub enum RewriteRule {
     Definitions {
         pattern: Expr,
         condition: Option<Expr>,
@@ -194,59 +186,48 @@ pub enum SymbolValue {
     },
 }
 
-// TODO: The structure of `SymbolValue` is not ideal for comparisons as it contains function
-//  pointers. Ideally this will be split into two parts. One for the match pattern + condition,
-//  and another containing the actual rule or builtin.
-
-impl Eq for SymbolValue {}
-
-impl PartialEq for SymbolValue {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (
-                Self::Definitions {
-                    pattern: p1,
-                    condition: c1,
-                    ground: g1,
-                },
-                Self::Definitions {
-                    pattern: p2,
-                    condition: c2,
-                    ground: g2,
-                },
-            ) => p1 == p2 && c1 == c2 && g1 == g2,
-
-            (
-                Self::BuiltIn {
-                    pattern: p1,
-                    condition: c1,
-                    built_in: _b1,
-                },
-                Self::BuiltIn {
-                    pattern: p2,
-                    condition: c2,
-                    built_in: _b2,
-                },
-            ) => {
-                p1 == p2 && c1 == c2 //&& (b1 as *const _ == b2 as *const _)
-            }
-
-            (
-                Self::BuiltInMut {
-                    pattern: p1,
-                    condition: c1,
-                    built_in: _b1,
-                },
-                Self::BuiltInMut {
-                    pattern: p2,
-                    condition: c2,
-                    built_in: _b2,
-                },
-            ) => {
-                p1 == p2 && c1 == c2 //&& (b1 as *const _ == b2 as *const _)
-            }
-
-            _ => false,
+impl RewriteRule {
+    pub fn pattern(&self) -> &Expr {
+        match self {
+            RewriteRule::Definitions { pattern, .. } => pattern,
+            RewriteRule::BuiltIn { pattern, .. } => pattern,
+            RewriteRule::BuiltInMut { pattern, .. } => pattern,
         }
+    }
+
+    pub fn condition(&self) -> Option<&Expr> {
+        match self {
+            RewriteRule::Definitions { condition, .. } => condition.as_ref(),
+            RewriteRule::BuiltIn { condition, .. } => condition.as_ref(),
+            RewriteRule::BuiltInMut { condition, .. } => condition.as_ref(),
+        }
+    }
+}
+
+/// A `RewriteRuleSet` is a set of `RewriteRule` values.
+pub struct RewriteRuleSet(Vec<RewriteRule>);
+
+impl RewriteRuleSet {
+    pub fn new() -> Self {
+        Self(vec![])
+    }
+
+    pub fn has_rule(&self, pattern: &Expr, condition: Option<&Expr>) -> bool {
+        self.0
+            .iter()
+            .any(|r| r.pattern() == pattern && r.condition() == condition)
+    }
+
+    pub fn push(&mut self, rewrite_rule: RewriteRule) {
+        self.0.push(rewrite_rule);
+    }
+}
+
+impl<'a> IntoIterator for &'a RewriteRuleSet {
+    type Item = &'a RewriteRule;
+    type IntoIter = core::slice::Iter<'a, RewriteRule>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        (&self.0).into_iter()
     }
 }

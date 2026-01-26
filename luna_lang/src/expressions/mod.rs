@@ -32,11 +32,10 @@ impl Expr {
         self.0.as_ref()
     }
 
-    /// Returns the outermost symbol "tag" used in this expression.
-    pub fn tag(&self) -> Option<&Symbol> {
+    pub fn name(&self) -> Option<&Symbol> {
         match *self.0 {
-            ExprKind::Symbol(ref v) => Some(v),
-            ExprKind::Normal(ref v) => v.head().tag(),
+            ExprKind::Symbol(ref symbol) => Some(symbol),
+            ExprKind::Normal(ref normal) => normal.head().name(),
             _ => None,
         }
     }
@@ -48,13 +47,6 @@ impl Expr {
             ExprKind::Real(_) => Self::from(Symbol::new("Real")),
             ExprKind::Symbol(_) => Self::from(Symbol::new("Symbol")),
             ExprKind::Normal(ref v) => v.head().clone(),
-        }
-    }
-
-    pub fn try_head_symbol(&self) -> Option<&Symbol> {
-        match *self.0 {
-            ExprKind::Normal(ref v) => v.try_head_symbol(),
-            _ => None,
         }
     }
 

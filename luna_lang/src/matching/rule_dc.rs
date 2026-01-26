@@ -3,10 +3,10 @@ use crate::{
     is_any_sequence_variable,
 };
 
-/// Decomposition under a commutative head.
+/// Decomposition under a commutative or associative-commutative head.
 ///
-/// Matches a pattern `f[x, ...]` against a value `g[y, ...]` where `f` is a commutative function.
-/// The value of `x` must not be a sequence variable.
+/// Matches a pattern `f[x, ...]` against a value `g[y, ...]` where `f` is a commutative or
+/// associative-commutative function and the value of `x` is not a sequence variable.
 ///
 /// Assumptions:
 /// - `f` is a commutative or associative-commutative function.
@@ -14,8 +14,6 @@ use crate::{
 pub(crate) struct RuleDC {
     pattern: Normal,
     ground: Normal,
-
-    /// Which child of the ground function we are matching on.
     term_idx: usize,
 }
 
@@ -34,9 +32,9 @@ impl MatchRule for RuleDC {
         let p = match_equation.pattern.try_normal()?;
         let g = match_equation.ground.try_normal()?;
 
-        let (p0, _) = (p.part(0)?, g.part(0)?);
+        let (p_elem0, _) = (p.element(0)?, g.element(0)?);
 
-        if is_any_sequence_variable(p0) {
+        if is_any_sequence_variable(p_elem0) {
             return None;
         }
 

@@ -27,6 +27,22 @@ pub enum Attribute {
     /// During evaluation arguments will be flattened.
     /// For example `f[x, f[y, z]]` will be evaluated into `f[x, y, z]`.
     Associative,
+
+    /// When applying the symbol the first argument are to be held in an unevaluated form.
+    HoldFirst,
+
+    /// When applying the symbol all but the first argument are to be held in an unevaluated form.
+    HoldRest,
+
+    /// When applying the symbol all arguments are to be held in an unevaluated form.
+    HoldAll,
+
+    /// When applying the symbol all arguments are not to be modified in any way during evaluation.
+    HoldAllComplete,
+
+    /// When applying the symbol any Sequence objects appearing as arguments should not
+    /// automatically be flattened out.
+    SequenceHold,
 }
 
 impl Add<Attribute> for Attribute {
@@ -75,6 +91,26 @@ impl Attributes {
 
     pub fn associative(&self) -> bool {
         self.has(Attribute::Associative)
+    }
+
+    pub fn hold_first(&self) -> bool {
+        self.has(Attribute::HoldFirst)
+    }
+
+    pub fn hold_rest(&self) -> bool {
+        self.has(Attribute::HoldRest)
+    }
+
+    pub fn hold_all(&self) -> bool {
+        self.has(Attribute::HoldAll)
+    }
+
+    pub fn hold_all_complete(&self) -> bool {
+        self.has(Attribute::HoldAllComplete)
+    }
+
+    pub fn sequence_hold(&self) -> bool {
+        self.has(Attribute::SequenceHold)
     }
 }
 

@@ -3,10 +3,10 @@ use crate::{
     is_any_sequence_variable,
 };
 
-/// Decomposition under a non-commutative head.
+/// Decomposition under a non-commutative (i.e free or associative) head.
 ///
-/// Matches a pattern `f[x, ...]` against a value `g[y, ...]` where `f` is a free function.
-/// The value of `x` must not be a sequence variable.
+/// Matches a pattern `f[x, ...]` against a value `g[y, ...]` where `f` is a free or associative
+/// function and the value of `x` is not a sequence variable.
 ///
 /// Assumptions:
 /// - `f` is a free or associative (i.e. non-commutative) function.
@@ -32,9 +32,9 @@ impl MatchRule for RuleDNC {
         let p = match_equation.pattern.try_normal()?;
         let g = match_equation.ground.try_normal()?;
 
-        let (p0, _) = (p.part(0)?, g.part(0)?);
+        let (p_elem0, _) = (p.element(0)?, g.element(0)?);
 
-        if is_any_sequence_variable(p0) {
+        if is_any_sequence_variable(p_elem0) {
             return None;
         }
 

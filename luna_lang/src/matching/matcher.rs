@@ -1,11 +1,12 @@
 use crate::Symbol;
 use crate::matching::MatchRule;
-use crate::matching::rule_dc::{RuleDC};
+use crate::matching::rule_dc::RuleDC;
 use crate::matching::rule_dnc::RuleDNC;
 use crate::matching::rule_fve::RuleFVE;
 use crate::matching::rule_fvea::RuleFVEA;
 use crate::matching::rule_fveac::RuleFVEAC;
 use crate::matching::rule_ivea::RuleIVEA;
+use crate::matching::rule_iveac::RuleIVEAC;
 use crate::matching::rule_svea::RuleSVEA;
 use crate::matching::rule_sveac::RuleSVEAC;
 use crate::matching::rule_svec::RuleSVEC;
@@ -156,7 +157,9 @@ impl<'c> Matcher<'c> {
 
                     // Rules for associative-commutative symbols.
                     (true, true) => {
-                        // if let Some(rule) = RuleIVEAC::try_rule(&match_equation) {
+                        if let Some(rule) = RuleIVEAC::try_rule(&match_equation) {
+                            return Some(Box::new(rule));
+                        }
 
                         if let Some(rule) = RuleSVEAC::try_rule(&match_equation) {
                             return Some(Box::new(rule));
@@ -1566,6 +1569,39 @@ mod tests {
                 [("f", "fac"), ("xs", "Sequence[b, fac[a]]")],
                 [("f", "fac"), ("xs", "Sequence[fac[b], fac[a]]")],
                 [("f", "fac"), ("xs", "Sequence[fac[b, a]]")],
+            ]
+        );
+
+        // Function variable matching with blanks
+        matcher_test!(
+            function_variable_with_blanks,
+            "fac[f_[x_, y_], d]",
+            "fac[a, b, c, d]",
+            [
+                [("f", "fac"), ("x", "a"), ("y", "fac[b, c]")],
+                [("f", "fac"), ("x", "a"), ("y", "fac[c, b]")],
+                [("f", "fac"), ("x", "b"), ("y", "fac[a, c]")],
+                [("f", "fac"), ("x", "b"), ("y", "fac[c, a]")],
+                [("f", "fac"), ("x", "c"), ("y", "fac[a, b]")],
+                [("f", "fac"), ("x", "c"), ("y", "fac[b, a]")],
+                [("f", "fac"), ("x", "fac[a]"), ("y", "fac[b, c]")],
+                [("f", "fac"), ("x", "fac[a]"), ("y", "fac[c, b]")],
+                [("f", "fac"), ("x", "fac[b]"), ("y", "fac[a, c]")],
+                [("f", "fac"), ("x", "fac[b]"), ("y", "fac[c, a]")],
+                [("f", "fac"), ("x", "fac[c]"), ("y", "fac[a, b]")],
+                [("f", "fac"), ("x", "fac[c]"), ("y", "fac[b, a]")],
+                [("f", "fac"), ("x", "fac[a, b]"), ("y", "c")],
+                [("f", "fac"), ("x", "fac[a, b]"), ("y", "fac[c]")],
+                [("f", "fac"), ("x", "fac[b, a]"), ("y", "c")],
+                [("f", "fac"), ("x", "fac[b, a]"), ("y", "fac[c]")],
+                [("f", "fac"), ("x", "fac[a, c]"), ("y", "b")],
+                [("f", "fac"), ("x", "fac[a, c]"), ("y", "fac[b]")],
+                [("f", "fac"), ("x", "fac[c, a]"), ("y", "b")],
+                [("f", "fac"), ("x", "fac[c, a]"), ("y", "fac[b]")],
+                [("f", "fac"), ("x", "fac[b, c]"), ("y", "a")],
+                [("f", "fac"), ("x", "fac[b, c]"), ("y", "fac[a]")],
+                [("f", "fac"), ("x", "fac[c, b]"), ("y", "a")],
+                [("f", "fac"), ("x", "fac[c, b]"), ("y", "fac[a]")],
             ]
         );
     }

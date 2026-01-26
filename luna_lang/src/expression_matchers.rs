@@ -227,3 +227,16 @@ pub fn parse_any_sequence_variable(expr: &Expr) -> Option<(bool, Option<&Symbol>
 
     None
 }
+
+pub fn extract_condition(expr: Expr) -> (Expr, Option<Expr>) {
+    if let Some(normal) = expr.try_normal_head(&Symbol::new("Condition")) {
+        if normal.len() == 2 {
+            return (
+                normal.elements()[0].clone(),
+                Some(normal.elements()[1].clone()),
+            );
+        }
+    }
+
+    (expr, None)
+}
