@@ -18,8 +18,8 @@ impl Session {
 
         match result {
             Ok(expr) => {
-                let result = evaluate(expr, &mut self.context);
                 println!();
+                let result = evaluate(expr, &mut self.context);
                 println!("{}", result);
                 println!();
                 Ok(())
@@ -31,6 +31,12 @@ impl Session {
 }
 
 fn main() -> RLResult<()> {
+    // Set[f[0], 0]
+    // Set[f[1], 1]
+    // SetDelayed[f[n_], Plus[f[Plus[n, -1]], f[Plus[n, -2]]]]
+
+    // SetDelayed[f[n_], Set[f[n], Plus[f[Plus[n, -1]], f[Plus[n, -2]]]]]
+
     println!("Luna! A language for scientific computing");
     println!("v0.1.0");
     println!();

@@ -94,6 +94,20 @@ impl MatchRule for RuleSVEAC {
 
         // TODO: Evaluate constraints for `BlankSequence[h]` and `Pattern[_, BlankSequence[h]]`.
 
+        // If we are the final part of the pattern then it only makes sense to start looking for
+        // matches starting with the contents of the ground.
+        // This optimization prevents us producing a large number of unsolvable match equations.
+        if p.len() == 1 && !g.is_empty() {
+            return Some(Self {
+                pattern: p.clone(),
+                ground: g.clone(),
+                variable: variable.cloned(),
+                subset: Subset::full(g.len()),
+                complement: vec![],
+                afac_generator: Some(Box::new(AFACGenerator::new(g.clone()))),
+            });
+        }
+
         Some(Self::new(
             p.clone(),
             g.clone(),

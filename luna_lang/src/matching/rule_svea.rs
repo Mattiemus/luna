@@ -87,6 +87,13 @@ impl MatchRule for RuleSVEA {
 
         // TODO: Evaluate constraints for `BlankSequence[h]` and `Pattern[_, BlankSequence[h]]`.
 
+        // If we are the final part of the pattern then it only makes sense to start looking for
+        // matches starting with the contents of the ground.
+        // This optimization prevents us producing a large number of unsolvable match equations.
+        if p.len() == 1 && !g.is_empty() {
+            // TODO: This optimisation can apply here!
+        }
+
         Some(Self::new(
             p.clone(),
             g.clone(),

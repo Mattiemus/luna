@@ -6,3 +6,6 @@ edition = "2024"
 [dependencies]
 luna_lang   = { path = "../luna_lang" }
 rustyline = "17.0.2"
+
+[profile.release]
+debug = true

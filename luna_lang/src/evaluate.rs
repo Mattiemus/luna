@@ -1,35 +1,67 @@
 use crate::{
-    Attributes, Context, Expr, ExprKind, Matcher, Normal, RewriteRule, SolutionSet, Symbol,
+    Attributes, Context, Expr, ExprKind, Matcher, Normal, SolutionSet, Symbol, SymbolValue,
     ValueType,
 };
 
 // TODO: Evaluation is currently a bit gross. We will want to introduce some kind of
 //  enum to signal when evaluation has changed the expression etc.
 
+pub enum EvalResult {
+    Changed(Expr),
+    Unchanged(Expr),
+}
+
+impl EvalResult {
+    pub fn is_changed(&self) -> bool {
+        matches!(self, EvalResult::Changed(_))
+    }
+
+    pub fn expr(&self) -> &Expr {
+        match self {
+            EvalResult::Unchanged(e) | EvalResult::Changed(e) => e,
+        }
+    }
+
+    pub fn into_expr(self) -> Expr {
+        match self {
+            EvalResult::Unchanged(e) | EvalResult::Changed(e) => e,
+        }
+    }
+}
+
 pub fn evaluate(expr: Expr, context: &mut Context) -> Expr {
     let initial_context_state = context.state_version();
 
-    match expr.kind() {
-        ExprKind::Symbol(symbol) => {
-            let unevaluated_rule =
-                find_matching_definition(&expr, symbol, ValueType::OwnValue, context);
-
-            match unevaluated_rule {
-                None => expr,
-                Some(unevaluated_rule) => {
-                    let new_expr = unevaluated_rule.apply(expr, context);
-
-                    if initial_context_state != context.state_version() {
-                        evaluate(new_expr, context)
-                    } else {
-                        new_expr
-                    }
-                }
+    match evaluate_step(expr, context) {
+        EvalResult::Changed(new_expr) => evaluate(new_expr, context),
+        EvalResult::Unchanged(new_expr) => {
+            if initial_context_state != context.state_version() {
+                evaluate(new_expr, context)
+            } else {
+                new_expr
             }
         }
+    }
+}
 
+pub fn evaluate_step(expr: Expr, context: &mut Context) -> EvalResult {
+    match expr.kind() {
+        ExprKind::Symbol(symbol) => {
+            match find_matching_definition(&expr, symbol, ValueType::OwnValue, context) {
+                None => EvalResult::Unchanged(expr),
+                Some(unevaluated_rule) => unevaluated_rule.apply(expr, context),
+            }
+        }
         ExprKind::Normal(normal) => {
-            let head_eval = evaluate(normal.head().clone(), context);
+            let mut changed = false;
+
+            let head_eval = match evaluate_step(normal.head().clone(), context) {
+                EvalResult::Changed(new_expr) => {
+                    changed = true;
+                    new_expr
+                }
+                EvalResult::Unchanged(new_expr) => new_expr,
+            };
 
             let attributes = match head_eval.name() {
                 None => Attributes::empty(),
@@ -49,7 +81,9 @@ pub fn evaluate(expr: Expr, context: &mut Context) -> Expr {
                         return elem.clone();
                     }
 
-                    evaluate(elem.clone(), context)
+                    let result = evaluate_step(elem.clone(), context);
+                    changed |= result.is_changed();
+                    result.into_expr()
                 })
                 .collect::<Vec<_>>();
 
@@ -64,101 +98,101 @@ pub fn evaluate(expr: Expr, context: &mut Context) -> Expr {
 
             let new_expr = Expr::from(Normal::new(head_eval, elements_eval));
 
-            if initial_context_state != context.state_version() {
-                return evaluate(new_expr, context);
+            if changed {
+                return EvalResult::Changed(new_expr);
             }
 
             match new_expr.name() {
-                None => new_expr,
+                None => EvalResult::Unchanged(new_expr),
                 Some(name) => {
-                    let unevaluated_rule =
-                        find_matching_definition(&new_expr, &name, ValueType::DownValue, context);
-
-                    match unevaluated_rule {
-                        None => expr,
-                        Some(unevaluated_rule) => {
-                            let new_expr = unevaluated_rule.apply(expr, context);
-
-                            if initial_context_state != context.state_version() {
-                                evaluate(new_expr, context)
-                            } else {
-                                new_expr
-                            }
-                        }
+                    match find_matching_definition(&new_expr, &name, ValueType::DownValue, context)
+                    {
+                        None => EvalResult::Unchanged(expr),
+                        Some(unevaluated_rule) => unevaluated_rule.apply(expr, context),
                     }
                 }
             }
         }
-
-        // String, Integer, and Real remain unchanged
-        _ => expr.clone(),
+        _ => EvalResult::Unchanged(expr),
     }
 }
 
 struct UnevaluatedRule {
-    rewrite_rule: RewriteRule,
+    value: SymbolValue,
     bindings: SolutionSet,
 }
 
 impl UnevaluatedRule {
-    pub fn apply(self, expr: Expr, context: &mut Context) -> Expr {
-        match &self.rewrite_rule {
-            RewriteRule::Definitions { ground, .. } => replace_all(&self.bindings, ground),
-            RewriteRule::BuiltIn { built_in, .. } => built_in(self.bindings, expr, context),
-            RewriteRule::BuiltInMut { built_in, .. } => built_in(self.bindings, expr, context),
+    pub fn apply(self, expr: Expr, context: &mut Context) -> EvalResult {
+        match self.value {
+            SymbolValue::Definitions { ground, .. } => replace_all(&self.bindings, ground),
+            SymbolValue::BuiltIn { built_in, .. } => built_in(self.bindings, expr, context),
+            SymbolValue::BuiltInMut { built_in, .. } => built_in(self.bindings, expr, context),
         }
     }
 }
 
 /// Replaces all instances of a variable with the value that it has been bound to, determined by
 /// symbol name.
-pub fn replace_all(bindings: &SolutionSet, expr: &Expr) -> Expr {
+pub fn replace_all(bindings: &SolutionSet, expr: Expr) -> EvalResult {
     match expr.kind() {
         ExprKind::Symbol(symbol) => {
             for (name, substitution) in bindings {
                 if symbol == name {
-                    return substitution.clone();
+                    return EvalResult::Changed(substitution.clone());
                 }
             }
 
-            expr.clone()
+            EvalResult::Unchanged(expr)
         }
-        ExprKind::Normal(normal) => Expr::from(Normal::new(
-            replace_all(bindings, normal.head()),
-            normal
+        ExprKind::Normal(normal) => {
+            let head = replace_all(bindings, normal.head().clone());
+            let mut changed = head.is_changed();
+
+            let elements = normal
                 .elements()
                 .iter()
-                .map(|elem| replace_all(bindings, elem))
-                .collect::<Vec<_>>(),
-        )),
-        _ => expr.clone(),
+                .map(|elem| {
+                    let result = replace_all(bindings, elem.clone());
+                    changed |= result.is_changed();
+                    result.into_expr()
+                })
+                .collect::<Vec<_>>();
+
+            let new_expr = Expr::from(Normal::new(head.into_expr(), elements));
+
+            if changed {
+                EvalResult::Changed(new_expr)
+            } else {
+                EvalResult::Unchanged(new_expr)
+            }
+        }
+        _ => EvalResult::Unchanged(expr),
     }
 }
 
-/// If any of the patterns in the vector of ``SymbolValue``'s match and satisfy any condition the
-/// pattern may have, return the variable bindings and substitutions or built_in for the match. The value returned is
-/// wrapped in an `UnevaluatedDefinitionMatch` and is left unevaluated.
+/// Search through the context to find a matching `SymbolValue` entries for the given symbol. This
+/// method also checks that any conditions are satisfied.
 fn find_matching_definition(
     ground: &Expr,
     symbol: &Symbol,
     value_type: ValueType,
     context: &mut Context,
 ) -> Option<UnevaluatedRule> {
-    let rewrite_rules = context.get_values(symbol, value_type)?;
+    let values = context.get_values(symbol, value_type)?;
 
-    for rewrite_rule in rewrite_rules {
-        let mut matcher: Matcher =
-            Matcher::new(rewrite_rule.pattern().clone(), ground.clone(), context);
+    for value in values {
+        let mut matcher: Matcher = Matcher::new(value.pattern().clone(), ground.clone(), context);
 
         while let Some(bindings) = matcher.next() {
-            if let Some(condition) = rewrite_rule.condition() {
+            if let Some(condition) = value.condition() {
                 todo!();
                 // if check_condition(c.clone(), &substitutions, context) {
                 //   return wrap_definition_match(&symbol_value, substitutions);
                 // }
             } else {
                 return Some(UnevaluatedRule {
-                    rewrite_rule: rewrite_rule.clone(),
+                    value: value.clone(),
                     bindings,
                 });
             }
