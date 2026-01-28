@@ -2,7 +2,7 @@ use crate::matching::function_application::{AFACGenerator, FunctionApplicationGe
 use crate::matching::subsets::Subset;
 use crate::{
     Expr, MatchEquation, MatchGenerator, MatchResult, MatchResultList, MatchRule, Normal,
-    Substitution, Symbol, parse_any_sequence_variable,
+    Substitution, Symbol, parse_any_sequence_variable, sym,
 };
 
 /// Sequence variable elimination under an associative-commutative head.
@@ -74,7 +74,7 @@ impl RuleSVEAC {
         if let Some(variable) = &self.variable {
             let result_substitution = MatchResult::Substitution(Substitution {
                 variable: variable.clone(),
-                ground: Expr::from(Normal::new(Symbol::new("Sequence"), ordered_sequence)),
+                ground: Expr::from(Normal::new(sym!(Sequence), ordered_sequence)),
             });
 
             return vec![result_equation, result_substitution];

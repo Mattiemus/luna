@@ -2,7 +2,7 @@ use crate::matching::permutations::PermutationGenerator32;
 use crate::matching::subsets::Subset;
 use crate::{
     Expr, MatchEquation, MatchGenerator, MatchResult, MatchResultList, MatchRule, Normal,
-    Substitution, Symbol, parse_any_sequence_variable,
+    Substitution, Symbol, parse_any_sequence_variable, sym,
 };
 
 /// Sequence variable elimination under a commutative head.
@@ -62,7 +62,7 @@ impl RuleSVEC {
         if let Some(variable) = &self.variable {
             let substitution = MatchResult::Substitution(Substitution {
                 variable: variable.clone(),
-                ground: Expr::from(Normal::new(Symbol::new("Sequence"), subset)),
+                ground: Expr::from(Normal::new(sym!(Sequence), subset)),
             });
 
             return vec![match_equation, substitution];
@@ -92,7 +92,7 @@ impl MatchRule for RuleSVEC {
                 variable: variable.cloned(),
                 empty_produced: true,
                 subset: Subset::full(g.len()),
-                permutations: PermutationGenerator32::new(g.len() as u8)
+                permutations: PermutationGenerator32::new(g.len() as u8),
             });
         }
 

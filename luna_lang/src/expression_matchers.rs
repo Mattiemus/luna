@@ -1,9 +1,9 @@
-use crate::Expr;
 use crate::Symbol;
+use crate::{Expr, sym};
 
 /// Matches an expression of the form `Sequence[___]`.
 pub fn is_sequence(expr: &Expr) -> bool {
-    expr.is_normal_head(&Symbol::new("Sequence"))
+    expr.is_normal_head(&sym!(Sequence))
 }
 
 /// Matches an expression of any the following forms:
@@ -11,7 +11,7 @@ pub fn is_sequence(expr: &Expr) -> bool {
 /// - `Blank[]`
 /// - `Blank[h]`
 pub fn is_blank(expr: &Expr) -> bool {
-    if let Some(v) = expr.try_normal_head(&Symbol::new("Blank")) {
+    if let Some(v) = expr.try_normal_head(&sym!(Blank)) {
         return matches!(v.elements().len(), 0 | 1);
     }
 
@@ -23,7 +23,7 @@ pub fn is_blank(expr: &Expr) -> bool {
 /// - `BlankSequence[]`
 /// - `BlankSequence[h]`
 pub fn is_blank_sequence(expr: &Expr) -> bool {
-    if let Some(v) = expr.try_normal_head(&Symbol::new("BlankSequence")) {
+    if let Some(v) = expr.try_normal_head(&sym!(BlankSequence)) {
         return matches!(v.elements().len(), 0 | 1);
     }
 
@@ -35,7 +35,7 @@ pub fn is_blank_sequence(expr: &Expr) -> bool {
 /// - `BlankNullSequence[]`
 /// - `BlankNullSequence[h]`
 pub fn is_blank_null_sequence(expr: &Expr) -> bool {
-    if let Some(v) = expr.try_normal_head(&Symbol::new("BlankNullSequence")) {
+    if let Some(v) = expr.try_normal_head(&sym!(BlankNullSequence)) {
         return matches!(v.elements().len(), 0 | 1);
     }
 
@@ -59,7 +59,7 @@ pub fn is_any_blank_sequence(expr: &Expr) -> bool {
 /// - `Pattern[sym, BlankNullSequence[]]`
 /// - `Pattern[sym, BlankNullSequence[h]]`
 pub fn is_any_sequence_pattern(expr: &Expr) -> bool {
-    if let Some(v) = expr.try_normal_head(&Symbol::new("Pattern")) {
+    if let Some(v) = expr.try_normal_head(&sym!(Pattern)) {
         if let [s, p] = v.elements() {
             if let Some(_) = s.try_symbol() {
                 return is_any_blank_sequence(p);
@@ -86,7 +86,7 @@ pub fn is_any_sequence_variable(expr: &Expr) -> bool {
 
 /// Matches an expression of the form `Sequence[___]`.
 pub fn try_sequence(expr: &Expr) -> Option<&[Expr]> {
-    expr.try_normal_head(&Symbol::new("Sequence"))
+    expr.try_normal_head(&sym!(Sequence))
         .map(|seq| seq.elements())
 }
 
@@ -95,7 +95,7 @@ pub fn try_sequence(expr: &Expr) -> Option<&[Expr]> {
 /// - `Blank[]`
 /// - `Blank[h]`
 pub fn try_blank(expr: &Expr) -> Option<Option<&Expr>> {
-    if let Some(v) = expr.try_normal_head(&Symbol::new("Blank")) {
+    if let Some(v) = expr.try_normal_head(&sym!(Blank)) {
         if matches!(v.elements().len(), 0 | 1) {
             return Some(v.elements().get(0));
         }
@@ -109,7 +109,7 @@ pub fn try_blank(expr: &Expr) -> Option<Option<&Expr>> {
 /// - `BlankSequence[]`
 /// - `BlankSequence[h]`
 pub fn try_blank_sequence(expr: &Expr) -> Option<Option<&Expr>> {
-    if let Some(v) = expr.try_normal_head(&Symbol::new("BlankSequence")) {
+    if let Some(v) = expr.try_normal_head(&sym!(BlankSequence)) {
         if matches!(v.elements().len(), 0 | 1) {
             return Some(v.elements().get(0));
         }
@@ -123,7 +123,7 @@ pub fn try_blank_sequence(expr: &Expr) -> Option<Option<&Expr>> {
 /// - `BlankNullSequence[]`
 /// - `BlankNullSequence[h]`
 pub fn try_blank_null_sequence(expr: &Expr) -> Option<Option<&Expr>> {
-    if let Some(v) = expr.try_normal_head(&Symbol::new("BlankNullSequence")) {
+    if let Some(v) = expr.try_normal_head(&sym!(BlankNullSequence)) {
         if matches!(v.elements().len(), 0 | 1) {
             return Some(v.elements().get(0));
         }
@@ -137,7 +137,7 @@ pub fn try_blank_null_sequence(expr: &Expr) -> Option<Option<&Expr>> {
 /// - `Pattern[sym, Blank[]]`
 /// - `Pattern[sym, Blank[h]]`
 pub fn try_blank_pattern(expr: &Expr) -> Option<(&Symbol, Option<&Expr>)> {
-    if let Some(v) = expr.try_normal_head(&Symbol::new("Pattern")) {
+    if let Some(v) = expr.try_normal_head(&sym!(Pattern)) {
         if let [s, p] = v.elements() {
             if let Some(sym) = s.try_symbol() {
                 return try_blank(p).map(|h| (sym, h));
@@ -153,7 +153,7 @@ pub fn try_blank_pattern(expr: &Expr) -> Option<(&Symbol, Option<&Expr>)> {
 /// - `Pattern[sym, BlankSequence[]]`
 /// - `Pattern[sym, BlankSequence[h]]`
 pub fn try_blank_sequence_pattern(expr: &Expr) -> Option<(&Symbol, Option<&Expr>)> {
-    if let Some(v) = expr.try_normal_head(&Symbol::new("Pattern")) {
+    if let Some(v) = expr.try_normal_head(&sym!(Pattern)) {
         if let [s, p] = v.elements() {
             if let Some(sym) = s.try_symbol() {
                 return try_blank_sequence(p).map(|h| (sym, h));
@@ -169,7 +169,7 @@ pub fn try_blank_sequence_pattern(expr: &Expr) -> Option<(&Symbol, Option<&Expr>
 /// - `Pattern[sym, BlankNullSequence[]]`
 /// - `Pattern[sym, BlankNullSequence[h]]`
 pub fn try_blank_null_sequence_pattern(expr: &Expr) -> Option<(&Symbol, Option<&Expr>)> {
-    if let Some(v) = expr.try_normal_head(&Symbol::new("Pattern")) {
+    if let Some(v) = expr.try_normal_head(&sym!(Pattern)) {
         if let [s, p] = v.elements() {
             if let Some(sym) = s.try_symbol() {
                 return try_blank_null_sequence(p).map(|h| (sym, h));
@@ -229,7 +229,7 @@ pub fn parse_any_sequence_variable(expr: &Expr) -> Option<(bool, Option<&Symbol>
 }
 
 pub fn extract_condition(expr: &Expr) -> (&Expr, Option<&Expr>) {
-    if let Some(normal) = expr.try_normal_head(&Symbol::new("Condition")) {
+    if let Some(normal) = expr.try_normal_head(&sym!(Condition)) {
         if normal.len() == 2 {
             return (&normal.elements()[0], Some(&normal.elements()[1]));
         }

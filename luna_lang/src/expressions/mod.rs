@@ -2,8 +2,8 @@ mod kind;
 mod normal;
 mod symbol;
 
-use crate::OrdBigFloat;
 use crate::abstractions::{BigFloat, BigInteger};
+use crate::{OrdBigFloat, sym};
 use std::fmt;
 use std::fmt::Formatter;
 use std::hash::Hash;
@@ -42,10 +42,10 @@ impl Expr {
 
     pub fn head(&self) -> Self {
         match *self.0 {
-            ExprKind::String(_) => Self::from(Symbol::new("String")),
-            ExprKind::Integer(_) => Self::from(Symbol::new("Integer")),
-            ExprKind::Real(_) => Self::from(Symbol::new("Real")),
-            ExprKind::Symbol(_) => Self::from(Symbol::new("Symbol")),
+            ExprKind::String(_) => Self::from(sym!(String)),
+            ExprKind::Integer(_) => Self::from(sym!(Integer)),
+            ExprKind::Real(_) => Self::from(sym!(Real)),
+            ExprKind::Symbol(_) => Self::from(sym!(Symbol)),
             ExprKind::Normal(ref v) => v.head().clone(),
         }
     }

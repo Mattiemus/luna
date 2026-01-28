@@ -42,7 +42,7 @@ pub enum Attribute {
 
     /// When applying the symbol any Sequence objects appearing as arguments should not
     /// automatically be flattened out.
-    HoldSequence,
+    HoldSequences,
 }
 
 impl Add<Attribute> for Attribute {
@@ -109,8 +109,8 @@ impl Attributes {
         self.has(Attribute::HoldAllComplete)
     }
 
-    pub fn hold_sequence(&self) -> bool {
-        self.has(Attribute::HoldSequence)
+    pub fn hold_sequences(&self) -> bool {
+        self.has(Attribute::HoldSequences)
     }
 }
 

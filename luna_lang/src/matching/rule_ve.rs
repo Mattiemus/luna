@@ -39,6 +39,7 @@ impl MatchRule for RuleVE {
             parse_any_sequence_variable(&match_equation.pattern)
         {
             let gelements = try_sequence(&match_equation.ground)?;
+
             if !matches_empty && gelements.is_empty() {
                 return None;
             }

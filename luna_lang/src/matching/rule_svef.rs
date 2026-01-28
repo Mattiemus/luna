@@ -1,6 +1,6 @@
 use crate::{
     Expr, MatchEquation, MatchGenerator, MatchResult, MatchResultList, MatchRule, Normal,
-    Substitution, Symbol, parse_any_sequence_variable,
+    Substitution, Symbol, parse_any_sequence_variable, sym,
 };
 
 /// Sequence variable elimination under a free head.
@@ -58,10 +58,7 @@ impl RuleSVEF {
         if let Some(variable) = &self.variable {
             let substitution = MatchResult::Substitution(Substitution {
                 variable: variable.clone(),
-                ground: Expr::from(Normal::new(
-                    Symbol::new("Sequence"),
-                    self.ground_sequence.clone(),
-                )),
+                ground: Expr::from(Normal::new(sym!(Sequence), self.ground_sequence.clone())),
             });
 
             return vec![new_match_equation, substitution];

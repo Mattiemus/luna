@@ -1,4 +1,4 @@
-use luna_lang::{Context, evaluate, parse};
+use luna_lang::{Context, evaluate, parse_str};
 use rustyline::error::ReadlineError;
 use rustyline::{DefaultEditor, Result as RLResult};
 
@@ -14,7 +14,7 @@ impl Session {
     }
 
     fn process_input(&mut self, input: &str) -> Result<(), String> {
-        let result = parse(input);
+        let result = parse_str(input);
 
         match result {
             Ok(expr) => {

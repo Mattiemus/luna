@@ -58,15 +58,20 @@ impl Iterator for AFACGenerator {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parse;
+    use crate::parse_str;
 
     fn mk(exprs: &[&str]) -> Option<Vec<Expr>> {
-        Some(exprs.iter().map(|e| parse(e).unwrap()).collect::<Vec<_>>())
+        Some(
+            exprs
+                .iter()
+                .map(|e| parse_str(e).unwrap())
+                .collect::<Vec<_>>(),
+        )
     }
 
     #[test]
     fn generates_all_afa_applications() {
-        let f = parse("f[a, b, c]").unwrap();
+        let f = parse_str("f[a, b, c]").unwrap();
         let f_normal = f.try_normal().unwrap().clone();
 
         let mut afac_gen = AFACGenerator::new(f_normal);

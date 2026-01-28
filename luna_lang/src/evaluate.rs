@@ -1,10 +1,7 @@
 use crate::{
     Attributes, Context, Expr, ExprKind, Matcher, Normal, SolutionSet, Symbol, SymbolValue,
-    ValueType,
+    ValueType, try_sequence,
 };
-
-// TODO: Evaluation is currently a bit gross. We will want to introduce some kind of
-//  enum to signal when evaluation has changed the expression etc.
 
 pub enum EvalResult {
     Changed(Expr),
@@ -68,7 +65,7 @@ pub fn evaluate_step(expr: Expr, context: &mut Context) -> EvalResult {
                 Some(name) => context.get_attributes(&name),
             };
 
-            let elements_eval = normal
+            let mut elements_eval = normal
                 .elements()
                 .iter()
                 .enumerate()
@@ -87,8 +84,23 @@ pub fn evaluate_step(expr: Expr, context: &mut Context) -> EvalResult {
                 })
                 .collect::<Vec<_>>();
 
-            //   * Unless h has attributes SequenceHold or HoldAllComplete, flatten out all Sequence objects that appear among the ei.
-            //   * Unless h has attribute HoldAllComplete, strip the outermost of any Unevaluated wrappers that appear among the ei.
+            if !attributes.hold_all_complete() {
+                if !attributes.hold_sequences() {
+                    elements_eval = elements_eval
+                        .into_iter()
+                        .flat_map(|elem| match try_sequence(&elem) {
+                            None => vec![elem],
+                            Some(seq) => {
+                                changed = true;
+                                seq.to_vec()
+                            }
+                        })
+                        .collect();
+                }
+
+                //   * strip the outermost of any Unevaluated wrappers that appear among the ei.
+            }
+
             //   * If h has attribute Flat, then flatten out all nested expressions with head h.
             //   * If h has attribute Listable, then thread through any ei that are lists.
             //   * If h has attribute Orderless, then sort the ei into order
@@ -117,6 +129,39 @@ pub fn evaluate_step(expr: Expr, context: &mut Context) -> EvalResult {
     }
 }
 
+/// Replaces all instances of a variable with the value that it has been bound to, determined by
+/// symbol name.
+pub fn replace_all(bindings: &SolutionSet, expr: Expr) -> EvalResult {
+    match expr.kind() {
+        ExprKind::Symbol(symbol) => {
+            if let Some(substitution) = bindings.get(symbol) {
+                return EvalResult::Changed(substitution.clone());
+            }
+
+            EvalResult::Unchanged(expr)
+        }
+        ExprKind::Normal(normal) => {
+            let head = replace_all(bindings, normal.head().clone());
+
+            let mut changed = head.is_changed();
+            let mut elements = Vec::with_capacity(normal.elements().len());
+
+            for elem in normal.elements() {
+                let result = replace_all(bindings, elem.clone());
+                changed |= result.is_changed();
+                elements.push(result.into_expr())
+            }
+
+            if changed {
+                EvalResult::Changed(Expr::from(Normal::new(head.into_expr(), elements)))
+            } else {
+                EvalResult::Unchanged(expr)
+            }
+        }
+        _ => EvalResult::Unchanged(expr),
+    }
+}
+
 struct UnevaluatedRule {
     value: SymbolValue,
     bindings: SolutionSet,
@@ -132,45 +177,6 @@ impl UnevaluatedRule {
     }
 }
 
-/// Replaces all instances of a variable with the value that it has been bound to, determined by
-/// symbol name.
-pub fn replace_all(bindings: &SolutionSet, expr: Expr) -> EvalResult {
-    match expr.kind() {
-        ExprKind::Symbol(symbol) => {
-            for (name, substitution) in bindings {
-                if symbol == name {
-                    return EvalResult::Changed(substitution.clone());
-                }
-            }
-
-            EvalResult::Unchanged(expr)
-        }
-        ExprKind::Normal(normal) => {
-            let head = replace_all(bindings, normal.head().clone());
-            let mut changed = head.is_changed();
-
-            let elements = normal
-                .elements()
-                .iter()
-                .map(|elem| {
-                    let result = replace_all(bindings, elem.clone());
-                    changed |= result.is_changed();
-                    result.into_expr()
-                })
-                .collect::<Vec<_>>();
-
-            let new_expr = Expr::from(Normal::new(head.into_expr(), elements));
-
-            if changed {
-                EvalResult::Changed(new_expr)
-            } else {
-                EvalResult::Unchanged(new_expr)
-            }
-        }
-        _ => EvalResult::Unchanged(expr),
-    }
-}
-
 /// Search through the context to find a matching `SymbolValue` entries for the given symbol. This
 /// method also checks that any conditions are satisfied.
 fn find_matching_definition(
@@ -182,7 +188,7 @@ fn find_matching_definition(
     let values = context.get_values(symbol, value_type)?;
 
     for value in values {
-        let mut matcher: Matcher = Matcher::new(value.pattern().clone(), ground.clone(), context);
+        let mut matcher = Matcher::new(value.pattern().clone(), ground.clone(), context);
 
         while let Some(bindings) = matcher.next() {
             if let Some(condition) = value.condition() {

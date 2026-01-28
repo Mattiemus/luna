@@ -343,7 +343,7 @@ impl<'c> Iterator for Matcher<'c> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Attribute, Attributes, parse};
+    use crate::{Attribute, Attributes, parse_str};
 
     fn create_context() -> Context {
         let mut context = Context::new();
@@ -372,8 +372,11 @@ mod tests {
             fn $name() -> () {
                 let context = create_context();
 
-                let mut matcher =
-                    Matcher::new(parse($pattern).unwrap(), parse($ground).unwrap(), &context);
+                let mut matcher = Matcher::new(
+                    parse_str($pattern).unwrap(),
+                    parse_str($ground).unwrap(),
+                    &context,
+                );
 
                 assert_eq!(matcher.next(), None);
             }
@@ -384,8 +387,11 @@ mod tests {
             fn $name() -> () {
                 let context = create_context();
 
-                let mut matcher =
-                    Matcher::new(parse($pattern).unwrap(), parse($ground).unwrap(), &context);
+                let mut matcher = Matcher::new(
+                    parse_str($pattern).unwrap(),
+                    parse_str($ground).unwrap(),
+                    &context,
+                );
 
                 assert_eq!(matcher.next(), Some(HashMap::new()));
                 assert_eq!(matcher.next(), None);
@@ -397,15 +403,16 @@ mod tests {
             fn $name() -> () {
                 let context = create_context();
 
-                let mut matcher =
-                    Matcher::new(parse($pattern).unwrap(), parse($ground).unwrap(), &context);
+                let mut matcher = Matcher::new(
+                    parse_str($pattern).unwrap(),
+                    parse_str($ground).unwrap(),
+                    &context,
+                );
 
                 for expected_solution in $expected_solutions {
                     let parsed_expected_solution = expected_solution
                         .iter()
-                        .map(|(symbol, expr)| {
-                            (crate::Symbol::new(symbol), crate::parse(expr).unwrap())
-                        })
+                        .map(|(symbol, expr)| (Symbol::new(symbol), parse_str(expr).unwrap()))
                         .collect::<HashMap<_, _>>();
 
                     assert_eq!(matcher.next(), Some(parsed_expected_solution));
